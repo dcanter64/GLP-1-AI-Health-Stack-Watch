@@ -1,0 +1,19 @@
+NEWS_QUERIES = [
+    "Eli Lilly Zepbound obesity",
+    "Altimmune pemvidutide obesity",
+]
+
+NEWS_TICKERS = [
+    "LLY",
+    "NVO",
+    "VKTX",
+]
+
+TICKER_EXCEPTIONS = {
+    "EXAI": {
+        "action": "drop",
+        "reason": "Exscientia went private.",
+    },
+}
+
+LOOKBACK_DAYS = 300

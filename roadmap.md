@@ -1,0 +1,228 @@
+# Roadmap
+
+## Environment Setup
+
+Add a project-local Python `.venv` before running the Streamlit dashboard:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Run the dashboard and project tests with the `.venv` activated.
+
+## Current Status
+
+GLP-1 AI Health Stack Watch v1 is finished as of 2026-07-19 and runnable as a Streamlit dashboard.
+
+The next major effort is a phased upgrade toward a GLP-1 and AI-Health Capital Allocation Decision Layer. This upgrade must proceed one phase at a time. Phase 1 is the only approved next implementation scope unless the user explicitly approves a later phase.
+
+Completed:
+
+- Created a modular Python project under `glp1_watch/`.
+- Added the Streamlit dashboard shell with tabs for executive summary, Eli Lilly AI trade, baskets, news, theme scores, and diagnostics.
+- Added yfinance market-data ingestion with workspace-local caching.
+- Added Yahoo Finance RSS ingestion, story deduplication, theme classification, ticker detection, and rules-based sentiment scoring.
+- Added GLP-1 Flywheel Score and Eli Lilly AI-trade confirmation score.
+- Added Markdown, CSV, JSON, JSONL, and validation/audit outputs under `output/`.
+- Added graceful fallback behavior when Yahoo data is unavailable inside the Codex sandbox.
+- Removed `EXAI` from the ticker universe because Exscientia went private.
+- Added `start_dashboard.bat` for easy Windows startup.
+- Added a strict healthcare relevance gate so unrelated Yahoo Finance stories are rejected before classification, ticker tagging, sentiment, and scoring.
+- Added rejection diagnostics, accepted/rejected story counts, news confidence, and top rejected-story reasons to the audit flow.
+- Added Yahoo ticker headline feeds and a keyword prefilter so broad Yahoo Finance search noise is discarded before classification.
+- Added source-level filters in the News Feed tab.
+- Added sidebar controls for lookback windows and refresh behavior.
+- Added ticker exceptions handling for failed or private names.
+- Added personal overrides via `config.local.py`.
+- Added tests for scoring, theme classification, app helper behavior, and report-quality filters.
+- Improved report language so score drivers are surfaced explicitly.
+- Added source derivation from article URLs when Yahoo leaves source metadata blank.
+- Added a 21-day story window, weaker `Other`-theme rejection rules, and a qualified-story subset for scoring calibration.
+- Added `review_snapshot_history.py` to summarize score drift and the latest validation audit.
+- Added output-generation tests for `glp1_watch/reporting.py`.
+- Added tests for `review_snapshot_history.py` and snapshot-level consistency around accepted versus qualified story counts.
+- Updated score-history tracking so accepted-story and qualified-story counts are persisted separately, with backward-compatible history backfills.
+- Added `clean_outputs.bat` with confirmation, `--keep-history`, and `--yes` modes.
+- Added `.gitignore` rules for Python cache artifacts, pytest cache, local overrides, and raw output cache files.
+- Updated README operator notes so sandbox runs, live runs, validation interpretation, history review, and cleanup flow are documented.
+- Added `pytest.ini` so local pytest collection resolves the workspace package cleanly.
+- Added a per-primary-ticker and per-primary-ticker-theme cap for qualified scoring stories so one repeated ticker narrative cannot dominate the scoring subset as easily.
+- Fixed saved-report LLY drawdown formatting so missing 52-week-high inputs render as `Unknown` instead of `nan%`.
+- Added same-minute score-history deduplication for identical latest score, stance, AI score, and story-count rows.
+- Added market-data quality audit status so partial price coverage is visible in the dashboard, reports, and validation output.
+- Clarified the Streamlit report-save action and updated `start_dashboard.bat` so the launcher writes a snapshot report before opening the dashboard.
+- Improved saved reports with diversified key-story selection, legal-dispute sentiment dampening, prior-run change lines, broader text cleanup, and a more reliable 52-week drawdown calculation.
+
+Latest successful live snapshot:
+
+- Date: 2026-07-26 13:34 UTC
+- Stance: Neutral
+- Score: 59.0
+- LLY AI trade score: 66.8
+- Ticker rows: 38
+- Total stories fetched: 241
+- Accepted relevant news stories: 77
+- Qualified scoring stories: 24
+- Scoring coverage: 24 of 77 accepted stories qualified for scoring
+- News confidence: High
+- RSS errors: 0
+- Market data error: None
+- Market data quality: High
+
+Important note:
+
+- The old 2026-07-09 15:06 UTC live report is no longer the best reference point for the current code because current live runs now reflect the stricter relevance gate, accepted-versus-qualified story reporting, and the newer ticker-concentration cap.
+- The latest calibrated live run is `Neutral` at 59.0 with 24 qualified stories, high news confidence, and high market data quality.
+- The previous cleanup blockers are now addressed: saved reports no longer show `nan%` for missing LLY drawdown data, and identical same-minute score-history appends are skipped going forward.
+
+## Environment Notes
+
+The Codex sandbox can resolve DNS and ping external hosts, but outbound TCP 443 is blocked inside the sandbox. Live Yahoo Finance and RSS calls work when the script is run outside the sandbox.
+
+Yahoo Finance RSS search quality was the main limitation early in the project. Ticker headline feeds, source derivation, a keyword prefilter, stricter report-quality filters, and a ticker-theme scoring cap are now in place. The next code pass should focus more on polish and residual noise than on basic feed viability.
+
+Use either:
+
+```bat
+start_dashboard.bat
+```
+
+or:
+
+```bash
+python generate_snapshot.py
+streamlit run app.py
+```
+
+## Project Completion
+
+The original v1 roadmap is complete as of 2026-07-19. The dashboard, live-data fallback behavior, news-quality controls, scoring calibration, audit outputs, cleanup tooling, documentation, and test coverage are all in place.
+
+The final review confirmed:
+
+- Latest snapshot: 2026-07-26 13:34 UTC
+- Stance: Neutral
+- Overall score: 59.0
+- LLY AI-trade score: 66.8
+- Accepted stories: 77
+- Qualified scoring stories: 24
+- News confidence: High
+- Market data quality: High
+- Score history tracked: 38 snapshots
+- Tests: 38 passed
+
+Current finish status:
+
+- No active v1 code blockers remain.
+- No further v1 roadmap work is required for the script to be considered finished.
+- Future work is now organized as the gated decision-layer upgrade described below.
+
+The final operational decisions were:
+
+- No further `NEWS_TICKERS` / `NEWS_QUERIES` tuning was warranted; the qualified scoring subset remained diversified despite feed concentration.
+- Generated point-in-time artifacts are pruned between reviews while `output/history/dashboard_scores.jsonl` is preserved.
+- Same-minute history deduplication is working; valid metric changes remain recorded.
+
+## Final Review Checklist
+
+1. Open the newest files under `output/reports/` and `output/validation/`.
+2. Confirm the latest saved live snapshot still reads `2026-07-26 13:34 UTC`, `59.0`, `Neutral`, `77 accepted`, and `24 qualified`.
+3. Confirm the LLY trend line renders a real drawdown or `Unknown`, not `nan%`.
+4. Run `python review_snapshot_history.py` after any output or history-writing change.
+
+## Decision-Layer Upgrade Roadmap
+
+The long-term goal is to evolve the project from a descriptive thematic dashboard into a GLP-1 and AI-health capital-allocation decision layer.
+
+The durable full specification is preserved in `DECISION_LAYER_UPGRADE_SPEC.md`.
+
+This work must be completed in deliberate phases. At the start of each phase, inspect the repository, review prior phase output and documentation, confirm tests pass, and produce a concise implementation plan for that phase only. At the end of each phase, run tests, generate current outputs, update documentation, and stop for approval.
+
+### Phase 1: Improve the Existing Analytical Structure
+
+Status: planned.
+
+Objective: make the current report more decision-ready without issuing allocation tiers or portfolio recommendations.
+
+Required additions:
+
+- Configurable health-stack sleeves.
+- Ticker-to-sleeve mapping.
+- Sleeve-level market confirmation summaries.
+- Overall confirmation-state classification.
+- Leader-concentration analysis.
+- Separate leader assessment and stack assessment.
+- Event-level news clustering with unique event counts and independent source counts.
+- New top-of-report section: `Health Stack Confirmation Structure`.
+
+Phase 1 must preserve all existing market data, news, scoring, reporting, validation, and command-line workflows.
+
+See `PHASE_1_IMPLEMENTATION_PLAN.md` for the implementation plan.
+
+### Phase 2: Add Sleeve-Level Opportunity Scoring
+
+Status: gated; do not begin until Phase 1 is reviewed and approved.
+
+Planned additions:
+
+- Rename/clarify the current overall score as the Health Stack Flywheel Score.
+- Add Structural Thesis Score.
+- Add Market Confirmation Score.
+- Add Catalyst Score.
+- Add Expectations Risk Score.
+- Add sleeve-level Opportunity Scores and trend classifications.
+- Add `Health Stack Opportunity Ranking` to the report.
+
+### Phase 3: Add Persistence, History, and Recommendation Readiness
+
+Status: gated; do not begin until Phase 2 is reviewed and approved.
+
+Planned additions:
+
+- Store historical decision-layer metrics.
+- Track sleeve score trends, persistence, acceleration, deterioration, and repair.
+- Add recommendation-readiness classifications without issuing allocation recommendations.
+- Add `Persistence and Decision Readiness` and richer change-since-prior-report sections.
+
+### Phase 4: Add the Capital Allocation Decision Layer
+
+Status: gated; do not begin until Phase 3 is reviewed and approved.
+
+Planned additions:
+
+- Add sleeve recommendations.
+- Add allocation tiers.
+- Add leader decision and broad-stack decision.
+- Add broad vs selective exposure classification.
+- Add confidence, urgency, tactical, and strategic views.
+- Add upgrade, downgrade, and invalidation conditions.
+
+### Phase 5: Add Position-Level Decisions and Accountability
+
+Status: gated; do not begin until Phase 4 is reviewed and approved.
+
+Planned additions:
+
+- Add ticker-level decisions.
+- Add decision journal.
+- Add historical accountability metrics.
+- Add basic backtesting where reliable.
+
+## Cleanup Notes
+
+Historical output and cache files may still contain older ticker universes, including `EXAI`, from prior runs. The live config no longer requests `EXAI`.
+
+Generated point-in-time outputs are useful for local audit review but should not be versioned long term. Git should ignore generated reports, validation audits, classified CSVs, and raw RSS payloads while preserving `output/history/dashboard_scores.jsonl` as the durable score-history audit trail.
+
+That cleanup pass is now in place:
+
+- Use `clean_outputs.bat` for an interactive cleanup.
+- Use `clean_outputs.bat --keep-history` to preserve `output/history/dashboard_scores.jsonl`.
+- Use `clean_outputs.bat --yes` to skip the confirmation prompt.
+
+
+
+
+
