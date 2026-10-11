@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import re
@@ -291,11 +291,19 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
         "",
         snapshot.get("committee_decision", "No committee decision available."),
         "",
-        "## 2. Allocation Decisions",
-        "",
-        "| Sleeve | Prev → Rec Tier | Recommendation | Confidence | Urgency | Speed |",
-        "| --- | --- | --- | --- | --- | --- |",
     ]
+    pointer = str(snapshot.get("committee_pointer") or "").strip()
+    if pointer:
+        lines.append(pointer)
+        lines.append("")
+    lines.extend(
+        [
+            "## 2. Allocation Decisions",
+            "",
+            "| Sleeve | Prev → Rec Tier | Recommendation | Confidence | Urgency | Speed |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for card in cards:
         lines.append(
             f"| {card['sleeve']} | {_format_tier_change(card)} "
@@ -358,6 +366,109 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
             lines.append(f"- {risk}")
     else:
         lines.append("- No elevated decision risks flagged this report.")
+    lines.append("")
+    return lines
+
+
+def _fmt_pct(value: object) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "n/a"
+    try:
+        return f"{float(value):+.1%}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _fmt_yes_no(value: object) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return "n/a"
+    return "Yes" if bool(value) else "No"
+
+
+def build_positions_section(snapshot: dict) -> list[str]:
+    """Phase 5 §9: position-level decisions."""
+    cards = snapshot.get("position_cards") or []
+    lines = ["## 9. Position-Level Decisions", ""]
+    if not cards:
+        lines.extend(["Position data unavailable for this run.", ""])
+        return lines
+    lines.extend(
+        [
+            "Analytical only — no trade execution, no personalized sizing. "
+            "A ticker call may be more defensive than its sleeve but cannot "
+            "override the broad-stack exposure decision.",
+            "",
+            "| Ticker | Sleeve | Trend | RS SPY | RS XLV | RS Sleeve | 50DMA | 200DMA | Drawdown | Status | Recommendation | Tier | Conf | Urgency |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for card in cards:
+        tier = card.get("tier")
+        tier_txt = str(tier) if tier is not None else "n/a"
+        lines.append(
+            f"| {card['ticker']} | {card.get('sleeve') or 'n/a'} "
+            f"| {card.get('price_trend') or 'n/a'} "
+            f"| {_fmt_pct(card.get('rs_vs_spy'))} | {_fmt_pct(card.get('rs_vs_xlv'))} "
+            f"| {_fmt_pct(card.get('rs_vs_sleeve'))} "
+            f"| {_fmt_yes_no(card.get('above_50dma'))} | {_fmt_yes_no(card.get('above_200dma'))} "
+            f"| {_fmt_pct(card.get('drawdown_from_high'))} "
+            f"| {card.get('status')} | {card.get('recommendation')} | {tier_txt} "
+            f"| {card.get('confidence', 0):.0f} | {card.get('urgency')} |"
+        )
+    lines.append("")
+    # Notable calls: defensive divergences and not-rated names.
+    divergences = snapshot.get("position_divergences") or []
+    if divergences:
+        lines.append("**Notable defensive divergences** (ticker more defensive than sleeve):")
+        for card in divergences:
+            lines.append(f"- {card['ticker']} ({card.get('sleeve')}): {card['status']} — {card.get('reason')}.")
+        lines.append("")
+    not_rated = [c for c in cards if c.get("status") == "Insufficient Evidence / Not Rated"]
+    if not_rated:
+        lines.append(
+            f"**Not rated** ({len(not_rated)}): "
+            + ", ".join(c["ticker"] for c in not_rated[:10])
+            + ("…" if len(not_rated) > 10 else "")
+            + " — insufficient technical or thesis data; no recommendation forced."
+        )
+        lines.append("")
+    return lines
+
+
+def build_journal_section(snapshot: dict) -> list[str]:
+    """Phase 5 §10: decision journal and accountability."""
+    from .accountability import summarize_accountability
+    from .backtest import summarize_track_a
+
+    lines = ["## 10. Decision Journal and Accountability", ""]
+    journal = snapshot.get("journal")
+    n_entries = 0 if journal is None or getattr(journal, "empty", True) else len(journal)
+    lines.append(
+        f"- Journal entries: {n_entries} (sleeve and ticker decisions, "
+        f"methodology phase5-v1). Decision-time fields are immutable; only "
+        f"outcome fields fill as maturities arrive."
+    )
+    if n_entries:
+        filled_3m = 0
+        try:
+            filled_3m = int(journal["outcome_3m"].notna().sum())
+        except Exception:
+            pass
+        lines.append(f"- 3M outcomes recorded: {filled_3m}; remainder fill automatically on later runs (never before maturity, never interpolated).")
+    lines.append("")
+    lines.append("**Accountability**")
+    lines.append("")
+    metrics = snapshot.get("accountability_metrics") or {}
+    lines.extend(summarize_accountability(metrics) if metrics else ["- Accountability unavailable for this run."])
+    lines.append("")
+    lines.append("**Backtests**")
+    lines.append("")
+    lines.extend(summarize_track_a(snapshot.get("backtest_track_a") or {}))
+    track_b = snapshot.get("backtest_track_b") or {}
+    lines.append(
+        f"- Track B (decision-rule strategies): {track_b.get('status', 'n/a')}. "
+        f"{track_b.get('note', '')}"
+    )
     lines.append("")
     return lines
 
@@ -483,6 +594,8 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         "## 8. Existing Report Sections",
         "",
         *demoted,
+        *build_positions_section(snapshot),
+        *build_journal_section(snapshot),
     ]
 
     path.write_text("\n".join(lines), encoding="utf-8")

@@ -161,8 +161,63 @@ def render_confirmation_structure(snapshot: dict) -> None:
         )
         st.caption(f"Main contradiction: {snapshot.get('main_contradiction', 'None identified')}")
     render_decision_layer(snapshot)
+    render_positions(snapshot)
+    render_journal_accountability(snapshot)
     render_opportunity_ranking(snapshot)
     render_persistence_readiness(snapshot)
+
+
+def render_positions(snapshot: dict) -> None:
+    """Phase 5: position-level decisions display."""
+    import pandas as pd
+
+    cards = snapshot.get("position_cards") or []
+    if not cards:
+        return
+    with st.expander("Position-Level Decisions", expanded=False):
+        st.caption(
+            "Analytical only — no trade execution, no personalized sizing. "
+            "A ticker call may be more defensive than its sleeve but cannot "
+            "override broad-stack exposure."
+        )
+        rows = [
+            {
+                "Ticker": c["ticker"],
+                "Sleeve": c.get("sleeve"),
+                "Trend": c.get("price_trend"),
+                "Status": c.get("status"),
+                "Recommendation": c.get("recommendation"),
+                "Tier": c.get("tier") if c.get("tier") is not None else "n/a",
+                "Confidence": f"{c.get('confidence', 0):.0f}",
+                "Urgency": c.get("urgency"),
+            }
+            for c in cards
+        ]
+        st.dataframe(pd.DataFrame(rows), width="stretch")
+        divergences = snapshot.get("position_divergences") or []
+        if divergences:
+            st.write("**Notable defensive divergences**")
+            for card in divergences:
+                st.write(f"- {card['ticker']}: {card['status']} — {card.get('reason')}")
+
+
+def render_journal_accountability(snapshot: dict) -> None:
+    """Phase 5: decision journal and accountability display."""
+    from .accountability import summarize_accountability
+    from .backtest import summarize_track_a
+
+    with st.expander("Decision Journal and Accountability", expanded=False):
+        journal = snapshot.get("journal")
+        n = 0 if journal is None or getattr(journal, "empty", True) else len(journal)
+        st.write(f"Journal entries: {n} (methodology phase5-v1).")
+        st.write("**Accountability**")
+        for line in summarize_accountability(snapshot.get("accountability_metrics") or {}):
+            st.write(line)
+        st.write("**Backtests**")
+        for line in summarize_track_a(snapshot.get("backtest_track_a") or {}):
+            st.write(line)
+        track_b = snapshot.get("backtest_track_b") or {}
+        st.write(f"Track B: {track_b.get('status', 'n/a')}. {track_b.get('note', '')}")
 
 
 def render_decision_layer(snapshot: dict) -> None:
