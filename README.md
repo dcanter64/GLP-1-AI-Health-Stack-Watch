@@ -6,7 +6,7 @@ Streamlit dashboard for tracking the GLP-1, Eli Lilly, AI-biotech, cardiometabol
 
 Version 1 is finished as of 2026-07-19. The Streamlit dashboard pulls yfinance market data, ingests Yahoo Finance RSS stories, classifies news themes, scores the GLP-1 flywheel, and writes audit/report artifacts on each run.
 
-A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phase 1 (analytical structure only; no allocation tiers or portfolio recommendations) is implemented on branch `muse/phase-1-confirmation-structure`; adversarial review is complete with findings fixed and live Windows validation passed — merge pending.
+A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phase 1 (analytical structure only; no allocation tiers or portfolio recommendations) is complete: adversarial review findings were fixed and live Windows validation passed. Phase 2 remains gated pending explicit approval.
 
 The news engine now uses ticker headline feeds, a keyword prefilter, source derivation, a 21-day story window, and a stricter healthcare relevance gate before story classification, sentiment, ticker tagging, and scoring. The scoring path also uses a smaller qualified-story subset so one noisy feed cannot overwhelm the flywheel score.
 
