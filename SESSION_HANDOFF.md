@@ -4,7 +4,7 @@
 
 The project is a working Streamlit dashboard that writes market, news, report, validation, and history artifacts under `output/`.
 
-The current documented baseline is:
+The current documented live baseline is:
 
 - Date: 2026-07-26 13:34 UTC
 - Stance: Neutral
@@ -15,42 +15,39 @@ The current documented baseline is:
 - Qualified scoring stories: 24
 - Market data quality: High
 - RSS errors: 0
-- Tests: 38 passing
+- Tests: 38 passing (pre-Phase-1 baseline)
 
-## User Request
+## Phase 1 Status (2026-10-11)
 
-The user attached a major upgrade prompt. The long-term target is a GLP-1 and AI-Health Capital Allocation Decision Layer, implemented in deliberate phases.
+Phase 1 is implemented on branch `muse/phase-1-confirmation-structure` and is NOT merged to master.
 
-The immediate instruction is to begin with planning and documentation only, then stop before implementing Phase 1 code.
+What was built (per the operator's 2026-10-11 decisions):
 
-The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 1 is complete.
+- Eight sleeves per the approved rosters; AI Infrastructure Enablers (NVDA, TSM, AVGO, SMH, SOXX) kept as a supporting eighth sleeve — explicit classifier input, reported, but excluded from core health-stack breadth counts.
+- `config/health_stack_sleeves.yaml` + loud-validation loader (`glp1_watch/health_stack_sleeves.py`).
+- Sleeve summaries + leadership concentration (`glp1_watch/leadership_concentration.py`).
+- Precedence-ordered eight-state confirmation classifier + leader/stack assessments (`glp1_watch/confirmation_state.py`).
+- Heuristic news-event clustering (`glp1_watch/news_event_clustering.py`).
+- Pipeline wiring, `Health Stack Confirmation Structure` report section, Streamlit expander.
+- 38 new tests, all passing. Full suite: 72 passed, 4 failed — the 4 failures are pre-existing `test_news.py` date-window artifacts (fail on master too).
+- Documented Phase 1 limitations: two-name Health Data and Clinical AI sleeve; heuristic clustering.
+
+Remaining before Phase 1 is considered complete:
+
+1. Adversarial review of the branch by a separate agent (operator requirement), with findings fixed.
+2. Live validation run from a normal Windows shell: `python generate_snapshot.py` (Yahoo/RSS unreachable from sandbox/VM), confirm the new report section renders on real data and no existing outputs regress.
+3. Merge to master after review + live run.
 
 ## Phase Gate
 
-Next approved work should be Phase 1 only:
+Phase 2 (sleeve-level opportunity scoring) is gated: do not begin until Phase 1 is reviewed, live-validated, merged, and explicitly approved.
 
-- Configurable investment sleeves.
-- Sleeve-level confirmation structure.
-- Leader concentration analysis.
-- Confirmation-state classification.
-- Separate leader and stack assessments.
-- News event clustering.
-- New report section: `Health Stack Confirmation Structure`.
-
-Do not implement Phase 2, Phase 3, Phase 4, or Phase 5 unless explicitly approved after Phase 1 review.
+The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 1 is complete.
 
 ## Important Guardrails
 
-- Preserve existing market-data collection, ticker baskets, relative-strength calculations, price-trend analysis, news collection, relevance filtering, sentiment scoring, theme classification, data-quality auditing, report sections, and command-line workflow.
-- Extend the current architecture instead of replacing it.
-- Do not add allocation tiers or portfolio recommendations in Phase 1.
-- Do not create placeholder modules for future phases.
-
-## Recommended Next Action
-
-Start Phase 1 by:
-
-1. Inspecting the repository again.
-2. Running `python -m pytest`.
-3. Reviewing the latest report and validation audit.
-4. Implementing only the Phase 1 functionality documented in `PHASE_1_IMPLEMENTATION_PLAN.md`.
+- Preserve existing market-data collection, ticker baskets, relative-strength calculations, price-trend analysis,
+  news ingestion, theme classification, scoring, reporting, validation, and command-line workflows.
+- `TICKER_GROUPS` and existing market-data behavior were not changed by Phase 1; sleeves are a separate analytical layer.
+- XLV, QQQ, and SPY remain comparators, not sleeve members (enforced by the loader).
+- No allocation tiers or portfolio recommendations until Phase 4, and only with explicit approval.
