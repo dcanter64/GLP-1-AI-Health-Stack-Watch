@@ -1,14 +1,23 @@
-"""Phase 1: heuristic news-event clustering.
+"""Phase 1: news-event clustering.
 
 Multiple articles about one lawsuit, clinical result, regulatory action, or
 partnership should count as one underlying event with multiple sources.
+Syndicated coverage rarely shares identical headlines, so clustering is
+fuzzy, not exact: a candidate joins an existing event only when all four
+signals agree:
 
-This is intentionally heuristic, not NLP: the event key reuses the existing
-``story_cluster_key`` (theme + significant title tokens, with a special case
-for LLY/NVO legal-ad disputes). Two different events can share a key if their
-titles are near-identical, and one event can split across keys if headlines
-are worded very differently. Both failure modes are documented as a Phase 1
-limitation; the counts are directional, not precise.
+- same news theme (exact match),
+- overlapping ticker sets (at least one shared ticker; untagged stories
+  never merge),
+- title similarity: Jaccard overlap of significant title tokens
+  (alphanumeric, length >= 5) at or above TITLE_SIMILARITY_THRESHOLD,
+- time proximity: published timestamps within EVENT_TIME_WINDOW_HOURS of
+  the event seed (missing timestamps are neutral, not blocking).
+
+Clustering is greedy and deterministic: articles are processed in
+(published_at, title) order and each joins the first matching event,
+otherwise it seeds a new one. Thresholds are heuristic judgment calls;
+counts are directional, not precise.
 
 A "material" event is a heuristic flag: high relevance, a material theme, or
 three or more independent sources covering it.
@@ -16,9 +25,17 @@ three or more independent sources covering it.
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
-from .reporting import story_cluster_key
+from .reporting import clean_report_text
+
+#: Jaccard similarity of significant title tokens required to link two stories.
+TITLE_SIMILARITY_THRESHOLD = 0.3
+
+#: Maximum age gap (hours) between a story and an event seed to join it.
+EVENT_TIME_WINDOW_HOURS = 72
 
 #: Themes treated as material on their own.
 MATERIAL_THEMES = frozenset(
@@ -50,6 +67,42 @@ EVENT_COLUMNS = [
 ]
 
 
+def _title_tokens(title: object) -> set[str]:
+    text = clean_report_text(title).lower()
+    return {token for token in re.findall(r"[a-z0-9]+", text) if len(token) >= 5}
+
+
+def _ticker_set(value: object) -> set[str]:
+    if value is None:
+        return set()
+    return {ticker.strip().upper() for ticker in str(value).split(",") if ticker.strip()}
+
+
+def _jaccard(first: set[str], second: set[str]) -> float:
+    if not first and not second:
+        return 0.0
+    return len(first & second) / len(first | second)
+
+
+def _same_event(candidate: pd.Series, seed: pd.Series) -> bool:
+    """All four signals must agree for a candidate to join the seed's event."""
+    if str(candidate.get("theme") or "") != str(seed.get("theme") or ""):
+        return False
+    if not (_ticker_set(candidate.get("tickers")) & _ticker_set(seed.get("tickers"))):
+        return False
+    if (
+        _jaccard(_title_tokens(candidate.get("title")), _title_tokens(seed.get("title")))
+        < TITLE_SIMILARITY_THRESHOLD
+    ):
+        return False
+    candidate_time = pd.to_datetime(candidate.get("published_at"), utc=True, errors="coerce")
+    seed_time = pd.to_datetime(seed.get("published_at"), utc=True, errors="coerce")
+    if pd.isna(candidate_time) or pd.isna(seed_time):
+        return True  # missing timestamps are neutral, not blocking
+    hours_apart = abs((candidate_time - seed_time).total_seconds()) / 3600
+    return hours_apart <= EVENT_TIME_WINDOW_HOURS
+
+
 def _independent_source_count(sources: pd.Series) -> int:
     cleaned = sources.fillna("").astype(str).str.strip().str.lower()
     cleaned = cleaned[~cleaned.isin({"", "unknown"})]
@@ -62,16 +115,15 @@ def cluster_news_events(
     """Cluster accepted articles into events.
 
     Returns ``(articles_with_event_id, events)``. The articles frame gains an
-    ``event_id`` column; the events frame has one row per unique event with
-    story/source counts and a material flag. Empty input yields empty frames
-    with the expected columns.
+    ``event_id`` column (``EVT-001`` style, deterministic in
+    (published_at, title) order); the events frame has one row per unique
+    event with story/source counts and a material flag. Empty input yields
+    empty frames with the expected columns.
     """
     articles = articles_df.copy()
     if articles.empty:
         articles["event_id"] = pd.Series(dtype=str)
         return articles, pd.DataFrame(columns=EVENT_COLUMNS)
-
-    articles["event_id"] = articles.apply(story_cluster_key, axis=1)
 
     if "published_at" in articles.columns:
         articles["_published_parsed"] = pd.to_datetime(
@@ -90,10 +142,34 @@ def cluster_news_events(
     if "title" not in articles.columns:
         articles["title"] = ""
 
+    ordered = articles.sort_values(
+        ["_published_parsed", "title"], na_position="last"
+    ).reset_index(drop=False, names="_original_index")
+
+    # Greedy deterministic clustering: each article joins the first matching
+    # event seed, otherwise it seeds a new event.
+    seeds: list[int] = []  # positional indices into `ordered`
+    event_of_position: dict[int, str] = {}
+    for position in range(len(ordered)):
+        candidate = ordered.iloc[position]
+        event_id = None
+        for event_number, seed_position in enumerate(seeds, start=1):
+            if _same_event(candidate, ordered.iloc[seed_position]):
+                event_id = f"EVT-{event_number:03d}"
+                break
+        if event_id is None:
+            seeds.append(position)
+            event_id = f"EVT-{len(seeds):03d}"
+        event_of_position[position] = event_id
+
+    ordered["event_id"] = ordered.index.map(event_of_position)
+    articles["event_id"] = (
+        ordered.set_index("_original_index")["event_id"].reindex(articles.index).values
+    )
+
     event_rows: list[dict[str, object]] = []
-    for event_id, group in articles.groupby("event_id"):
-        sources = group["source"]
-        independent_sources = _independent_source_count(sources)
+    for event_id, group in articles.groupby("event_id", sort=False):
+        independent_sources = _independent_source_count(group["source"])
         tickers = sorted(
             {
                 ticker.strip()
