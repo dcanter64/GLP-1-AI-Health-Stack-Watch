@@ -79,10 +79,30 @@ def build_confirmation_structure_section(snapshot: dict) -> list[str]:
                 f"({_format_share(weakest['avg_return_3m'], 1)} avg 3M, {weakest['status']})"
             )
         for _, row in supporting.iterrows():
-            lines.append(
+            supporting_line = (
                 f"- Supporting sleeve {row['sleeve']}: {row['status']} "
                 f"(excluded from core breadth counts)"
             )
+            stack_assessment = snapshot.get("stack_assessment", "")
+            if row["status"] == "deteriorating" and stack_assessment in {
+                "Broadly confirming",
+                "Selectively confirming",
+            }:
+                supporting_line += "; diverges from confirming stack"
+            elif row["status"] == "confirming" and stack_assessment in {
+                "Deteriorating",
+                "Failing",
+            }:
+                supporting_line += "; diverges from deteriorating stack"
+            lines.append(supporting_line)
+    top_ticker = snapshot.get("news_top_ticker") or "n/a"
+    lines.append(
+        f"- Catalyst breadth: {snapshot.get('qualified_theme_count', 0)} qualified themes"
+    )
+    lines.append(
+        f"- News concentration: top ticker {top_ticker} "
+        f"({_format_share(snapshot.get('news_top_ticker_share'))} of accepted stories)"
+    )
     breadth_line = (
         f"- Core health-stack breadth: {_format_share(concentration.get('pct_above_50dma'))} "
         f"above 50DMA, {_format_share(concentration.get('pct_outperform_xlv'))} "
