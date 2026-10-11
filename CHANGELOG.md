@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### Added (Phase 1, 2026-10-11; on branch `muse/phase-1-confirmation-structure`, pending review)
+### Added (Phase 1, 2026-10-11; on branch `muse/phase-1-confirmation-structure`, merge pending)
 
 - `config/health_stack_sleeves.yaml`: eight configurable health-stack sleeves (seven required + supporting AI Infrastructure Enablers) with operator-approved rosters.
 - `glp1_watch/health_stack_sleeves.py`: YAML loader with loud validation — unknown tickers, duplicate membership across sleeves, comparator tickers (XLV/QQQ/SPY) as members, and a wrong required-sleeve set all raise `ValueError`.
@@ -23,5 +23,6 @@
 
 - Latest documented live run: 2026-07-26 13:34 UTC.
 - Current documented tests: 38 passing (pre-Phase-1 baseline).
-- Phase 1 test state: 76 tests total — 72 passing, including all 38 new Phase 1 tests. Four `test_news.py` failures are pre-existing date-window artifacts (hardcoded 2026-07-08 fixtures aged past the 21-day news window as of 2026-10-11); they fail on master too and are unrelated to Phase 1.
-- Current project status: v1 dashboard complete; Phase 1 implemented on branch, pending adversarial review and a live validation run from a normal Windows shell (Yahoo/RSS are unreachable from the Codex sandbox and this agent's VM).
+- Review fixes (2026-10-11, same branch): real fuzzy event clustering (theme + ticker overlap + title Jaccard >= 0.3 + 72h window) replacing exact key grouping; `qualified_theme_count` and `news_top_ticker_share` wired into the classifier as downward-only constraints (catalyst breadth, news breadth, news-on-leader concentration); AI Infrastructure Enablers as an explicit classifier input (a deteriorating supporting sleeve blocks Broadly Confirming; it can never upgrade the read).
+- Phase 1 test state: 95 tests total — 91 passing, including all 57 new Phase 1 tests. Four `test_news.py` failures are pre-existing date-window artifacts (hardcoded 2026-07-08 fixtures aged past the 21-day news window as of 2026-10-11); they fail on master too and are unrelated to Phase 1.
+- Current project status: v1 dashboard complete; Phase 1 implemented on branch, adversarial review complete with findings fixed, live-validated on Windows 2026-10-11 (new report section renders coherently); merge pending operator approval. Phase 2 remains gated.
