@@ -48,6 +48,80 @@ class EventClusteringTests(unittest.TestCase):
         # Every article carries the event id.
         self.assertEqual(clustered["event_id"].nunique(), 1)
 
+    def test_varied_headlines_same_event_cluster(self) -> None:
+        # Realistically varied syndicated headlines about the same event must
+        # cluster even though no two titles are identical.
+        articles = pd.DataFrame(
+            [
+                make_article(
+                    "Eli Lilly files lawsuit against Novo Nordisk over weight loss advertisements",
+                    source="Source A",
+                    tickers="LLY, NVO",
+                    published="2026-10-01 10:00:00+00:00",
+                ),
+                make_article(
+                    "Lilly sues Novo Nordisk over weight loss advertisements in federal court",
+                    source="Source B",
+                    tickers="LLY",
+                    published="2026-10-01 15:00:00+00:00",
+                ),
+            ]
+        )
+        clustered, events = cluster_news_events(articles)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events.iloc[0]["independent_sources"], 2)
+        self.assertEqual(clustered["event_id"].nunique(), 1)
+
+    def test_same_headline_outside_time_window_splits(self) -> None:
+        articles = pd.DataFrame(
+            [
+                make_article(
+                    "Eli Lilly reports strong Zepbound sales growth",
+                    published="2026-10-01 10:00:00+00:00",
+                ),
+                make_article(
+                    "Eli Lilly reports strong Zepbound sales growth",
+                    source="Source B",
+                    published="2026-10-11 10:00:00+00:00",
+                ),
+            ]
+        )
+        _, events = cluster_news_events(articles)
+        self.assertEqual(len(events), 2)
+
+    def test_disjoint_tickers_do_not_cluster(self) -> None:
+        articles = pd.DataFrame(
+            [
+                make_article(
+                    "Lilly obesity drug shows strong weight loss results in trial",
+                    tickers="LLY",
+                ),
+                make_article(
+                    "Lilly obesity drug shows strong weight loss results in new trial readout",
+                    tickers="NVO",
+                ),
+            ]
+        )
+        _, events = cluster_news_events(articles)
+        self.assertEqual(len(events), 2)
+
+    def test_untagged_stories_do_not_cluster(self) -> None:
+        articles = pd.DataFrame(
+            [
+                make_article(
+                    "Lilly obesity drug shows strong weight loss results in trial",
+                    tickers="",
+                ),
+                make_article(
+                    "Lilly obesity drug shows strong weight loss results in trial",
+                    source="Source B",
+                    tickers="",
+                ),
+            ]
+        )
+        _, events = cluster_news_events(articles)
+        self.assertEqual(len(events), 2)
+
     def test_distinct_events_same_ticker_stay_separate(self) -> None:
         articles = pd.DataFrame(
             [
@@ -107,7 +181,7 @@ class EventClusteringTests(unittest.TestCase):
         articles = pd.DataFrame(
             [
                 make_article(title, source="Source A", tickers="LLY"),
-                make_article(title, source="Source B", tickers="NVO"),
+                make_article(title, source="Source B", tickers="LLY, NVO"),
             ]
         )
         clustered, events = cluster_news_events(articles)
