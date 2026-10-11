@@ -258,6 +258,110 @@ def build_persistence_section(snapshot: dict) -> list[str]:
     return lines
 
 
+def _strip_section_header(lines: list[str]) -> list[str]:
+    """Drop a section builder's own H2 header (and following blank line)."""
+    out = list(lines)
+    if out and out[0].startswith("## "):
+        out = out[1:]
+    if out and out[0] == "":
+        out = out[1:]
+    return out
+
+
+def _format_tier_change(card: dict) -> str:
+    prev = card.get("previous_tier")
+    new = card.get("recommended_tier")
+    change = card.get("tier_change")
+    if new is None:
+        return "not rated"
+    if prev is None:
+        return f"new → Tier {new}"
+    arrow = "→"
+    sign = f"{change:+d}" if change is not None else "?"
+    return f"Tier {prev} {arrow} Tier {new} ({sign})"
+
+
+def build_decision_layer_sections(snapshot: dict) -> list[str]:
+    """Phase 4: the Decision Layer report sections (1-7)."""
+    cards = snapshot.get("decision_cards") or []
+    leader = snapshot.get("leader_decision") or {}
+    stack = snapshot.get("stack_decision") or {}
+    lines = [
+        "## 1. Investment Committee Decision",
+        "",
+        snapshot.get("committee_decision", "No committee decision available."),
+        "",
+        "## 2. Allocation Decisions",
+        "",
+        "| Sleeve | Prev → Rec Tier | Recommendation | Confidence | Urgency | Speed |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for card in cards:
+        lines.append(
+            f"| {card['sleeve']} | {_format_tier_change(card)} "
+            f"| {card['recommendation']} | {card['confidence']:.0f} "
+            f"{card['confidence_band']} | {card['urgency']} "
+            f"| {card['implementation_speed']} |"
+        )
+    lines.extend(
+        [
+            "",
+            "Tiers are conviction statements (0 Avoid, 1 Exploratory, 2 Normal, "
+            "3 Overweight, 4 Maximum-conviction overweight), not portfolio "
+            "percentages. Confidence is the probabilistic expression of each "
+            "recommendation, not a literal outcome probability.",
+            "",
+            "## 3. Opportunity Ranking",
+            "",
+            *_strip_section_header(build_opportunity_ranking_section(snapshot)),
+            "## 4. Leader vs Stack Decision",
+            "",
+            f"- Leader: {leader.get('headline', 'n/a')}",
+            f"- Stack: {stack.get('headline', 'n/a')}",
+            f"- Agreement: {'Yes' if snapshot.get('leader_stack_agree') else 'No — size the leader independently of broad-stack exposure.'}",
+            "",
+            "## 5. Decision Cards",
+            "",
+        ]
+    )
+    for card in cards:
+        lines.extend(
+            [
+                f"### {card['sleeve']}",
+                "",
+                f"- Recommendation: {card['recommendation']} ({_format_tier_change(card)})",
+                f"- Implementation speed: {card['implementation_speed']}",
+                f"- Confidence: {card['confidence']:.0f} ({card['confidence_band']})",
+                f"- Urgency: {card['urgency']}",
+                f"- Tactical view: {card['tactical_view']}",
+                f"- Strategic view: {card['strategic_view']}",
+                f"- Views agree: {'Yes' if card['views_agree'] else 'No — tactical and strategic point different ways.'}",
+                f"- Upgrade: {card['upgrade_condition']}",
+                f"- Downgrade: {card['downgrade_condition']}",
+                f"- Invalidation: {card['invalidation_condition']}",
+                f"- Rationale: {card['rationale']}.",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## 6. What Changed Since the Previous Report",
+            "",
+            *_strip_section_header(build_what_changed_section(snapshot)),
+            "## 7. Decision Risks",
+            "",
+        ]
+    )
+    risks = snapshot.get("decision_risks") or []
+    if risks:
+        for risk in risks:
+            lines.append(f"- {risk}")
+    else:
+        lines.append("- No elevated decision risks flagged this report.")
+    lines.append("")
+    return lines
+
+
 def build_what_changed_section(snapshot: dict) -> list[str]:
     """Phase 3: What Changed Since the Previous Report section."""
     lines = ["## What Changed Since the Previous Report", ""]
@@ -271,17 +375,15 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
     ensure_output_dirs()
     path = REPORTS_DIR / f"glp1_ai_health_stack_watch_{as_of_stamp}.md"
     confirmation_section = build_confirmation_structure_section(snapshot)
-    opportunity_section = build_opportunity_ranking_section(snapshot)
     persistence_section = build_persistence_section(snapshot)
-    what_changed_section = build_what_changed_section(snapshot)
     top_stories = select_key_stories(snapshot["articles"], limit=10)
     news_stats = snapshot["news_stats"]
     market_quality = snapshot.get("market_data_quality", {})
     prior_delta_lines = build_prior_snapshot_delta_lines(snapshot, HISTORY_DIR / "dashboard_scores.jsonl")
 
-    lines = [
-        "# GLP-1 AI Health Stack Watch",
-        "",
+    decision_sections = build_decision_layer_sections(snapshot)
+
+    existing_lines = [
         "## Executive Summary",
         "",
         f"- Current stance: {snapshot['stance']}",
@@ -294,9 +396,7 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         f"- Negative score drivers: {', '.join(snapshot['negative_drivers']) if snapshot['negative_drivers'] else 'None'}",
         "",
         *confirmation_section,
-        *opportunity_section,
         *persistence_section,
-        *what_changed_section,
         "## Flywheel Score: Change Since Prior Run",
         "",
         *prior_delta_lines,
@@ -336,10 +436,10 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
     ]
 
     if top_stories.empty:
-        lines.append("- No accepted relevant stories passed the relevance gate for this run.")
+        existing_lines.append("- No accepted relevant stories passed the relevance gate for this run.")
 
     for _, row in top_stories.iterrows():
-        lines.extend(
+        existing_lines.extend(
             [
                 f"- {clean_report_text(row['title'])}",
                 f"  - Source: {clean_report_text(row['source']) if row['source'] else 'Unknown'}",
@@ -351,7 +451,7 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
             ]
         )
 
-    lines.extend(
+    existing_lines.extend(
         [
             "",
             "## Risks",
@@ -370,6 +470,20 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
             "",
         ]
     )
+
+    # Existing sections sit under "## 8. Existing Report Sections": demote
+    # their H2 headers one level so the Decision Layer numbering holds.
+    demoted = [
+        ("#" + line) if line.startswith("## ") else line for line in existing_lines
+    ]
+    lines = [
+        "# GLP-1 AI Health Decision Layer",
+        "",
+        *decision_sections,
+        "## 8. Existing Report Sections",
+        "",
+        *demoted,
+    ]
 
     path.write_text("\n".join(lines), encoding="utf-8")
     return path

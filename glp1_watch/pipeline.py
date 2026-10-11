@@ -27,6 +27,17 @@ from .persistence_engine import (
     build_what_changed_lines,
     load_history,
 )
+from .decision_engine import (
+    append_decision_history,
+    build_committee_decision,
+    build_decision_cards,
+    build_decision_risks,
+    build_leader_decision,
+    build_stack_decision,
+    classify_exposure,
+    leaders_stack_agree,
+    load_decision_history,
+)
 from .structural_thesis import compute_structural_thesis
 from .leadership_concentration import (
     LEADER_SLEEVE_NAME,
@@ -502,6 +513,38 @@ def build_dashboard_snapshot(
     persistence_table = build_persistence_table(sleeve_history, sleeves)
     what_changed_lines = build_what_changed_lines(sleeve_history)
 
+    # Phase 4: Capital Allocation Decision Layer. Decisions are recorded
+    # only when outputs are written; dry runs read the audit trail only.
+    prior_decisions = load_decision_history(HISTORY_DIR)
+    decision_cards = build_decision_cards(
+        opportunity_ranking=opportunity_ranking,
+        persistence_table=persistence_table,
+        sleeve_history=sleeve_history,
+        decision_history=prior_decisions,
+        sleeves=sleeves,
+        confirmation_state=confirmation["state"],
+        concentration=concentration,
+        market_data_quality=market_data_quality,
+        news_confidence=news_confidence,
+        news_events=news_events,
+        confidence_weights=decision_weights.confidence,
+    )
+    if write_outputs:
+        decision_history = append_decision_history(HISTORY_DIR, decision_cards, as_of_dt)
+    else:
+        decision_history = prior_decisions
+    leader_decision = build_leader_decision(decision_cards)
+    exposure = classify_exposure(
+        confirmation_state=confirmation["state"],
+        concentration=concentration,
+        cards=decision_cards,
+    )
+    stack_decision = build_stack_decision(
+        decision_cards, exposure, score_snapshot.overall_score
+    )
+    committee_decision = build_committee_decision(leader_decision, stack_decision, decision_cards)
+    decision_risks = build_decision_risks(decision_cards, leader_decision, stack_decision)
+
     snapshot = {
         "as_of_date": as_of_dt.strftime("%Y-%m-%d %H:%M UTC"),
         "lookback_days": lookback_days,
@@ -529,6 +572,14 @@ def build_dashboard_snapshot(
         "opportunity_ranking": opportunity_ranking,
         "persistence_table": persistence_table,
         "what_changed_lines": what_changed_lines,
+        "decision_cards": decision_cards,
+        "decision_history": decision_history,
+        "leader_decision": leader_decision,
+        "stack_decision": stack_decision,
+        "exposure": exposure,
+        "committee_decision": committee_decision,
+        "decision_risks": decision_risks,
+        "leader_stack_agree": leaders_stack_agree(leader_decision, stack_decision),
         "qualified_theme_count": qualified_theme_count,
         "news_top_ticker_share": round(news_top_ticker_share, 3),
         "news_top_ticker": news_top_ticker,
