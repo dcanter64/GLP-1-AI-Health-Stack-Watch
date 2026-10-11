@@ -27,9 +27,15 @@
 - 53 new tests across `test_decision_weights.py`, `test_structural_thesis.py`, `test_market_confirmation.py`, `test_catalyst_score.py`, `test_expectations_risk.py`, `test_opportunity.py`, and `test_opportunity_section.py`.
 - Review fixes (2026-10-11, same branch): all-NaN relative-strength columns now skip the `rs_breadth` component instead of fabricating 0.0 (benchmark-outage guard); `opportunity_weights` requires the exact four expected keys and rejects unknown/boolean keys at load time; zero-weight-sum configs yield no score instead of crashing; `interpret_opportunity(NaN)` returns "Insufficient data"; recognition-gap thresholds range-checked; `structural_thesis` tolerates a missing `tickers` column; trend labels stay in the spec's closed six-label set ("Unknown" when pace data is missing); opportunity confidence tops out at Medium (expectations risk caps it); catalyst confidence counts signed events only; added strong-stack/weak-leader and high-dispersion behavioral tests.
 
+### Added (Phase 3, 2026-10-11)
+
+- `glp1_watch/persistence_engine.py`: Phase 3 persistence engine — CSV history store (`output/history/health_stack_history.csv`) with upsert-on-rerun semantics; per-sleeve persistence metrics (4/8-report trends, improving/deteriorating streaks, above/below-threshold streaks, condition start date, max severity, second derivative); seven-state recommendation-readiness classification with precedence ordering and conflicting-evidence reporting; sleeve-level what-changed diffing.
+- New report sections `Persistence and Decision Readiness` and `What Changed Since the Previous Report`, plus a matching Streamlit expander.
+- 19 new tests in `tests/test_persistence_engine.py` covering all 13 spec'd Phase 3 test items.
+
 ### Planned
 
-- Phase 3 (persistence, history, recommendation readiness) is gated: do not begin until Phase 2 is reviewed, live-validated, merged, and explicitly approved.
+- Phase 4 (capital allocation decision layer) is gated: do not begin until Phase 3 is reviewed, live-validated, merged, and explicitly approved.
 - Later phases are gated and will not begin until the prior phase has been reviewed and approved.
 - Preserve the full Phase 1-5 upgrade specification in `DECISION_LAYER_UPGRADE_SPEC.md`.
 

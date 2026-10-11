@@ -185,14 +185,16 @@ Documented Phase 2 limitations: Structural Thesis is a news-evidence proxy (no f
 
 ### Phase 3: Add Persistence, History, and Recommendation Readiness
 
-Status: gated; do not begin until Phase 2 is reviewed and approved.
+Status: implemented 2026-10-11 on branch `muse/phase-3-persistence-readiness`; pending adversarial review and live validation.
 
-Planned additions:
+Implemented:
 
-- Store historical decision-layer metrics.
-- Track sleeve score trends, persistence, acceleration, deterioration, and repair.
-- Add recommendation-readiness classifications without issuing allocation recommendations.
-- Add `Persistence and Decision Readiness` and richer change-since-prior-report sections.
+- `glp1_watch/persistence_engine.py`: CSV history store (`output/history/health_stack_history.csv`, one row per sleeve per report date, upsert on reruns), persistence metrics (current/previous score, 4- and 8-report trends, consecutive improving/deteriorating streaks, streaks above/below 65/45, condition start date, max severity, second derivative), and the seven-state recommendation-readiness classification (Insufficient Evidence, Early Signal, Developing, Confirmed, Persistent, Exhausted, Repairing) with precedence ordering (Exhausted outranks Persistent) and always-reported conflicting evidence.
+- `## Persistence and Decision Readiness` report section plus Streamlit expander.
+- `## What Changed Since the Previous Report` section (score/trend/readiness moves, new/lost leaders, catalyst and breadth changes, data-quality changes).
+- 19 new tests covering the spec's 13 Phase 3 test items.
+
+Documented Phase 3 limitations: history starts cold (no backfill of pre-Phase-3 per-sleeve scores — early runs read Insufficient Evidence until streaks form); improvement threshold is a fixed 1.0-point noise floor; readiness classifies evidence maturity only, never portfolio actions.
 
 ### Phase 4: Add the Capital Allocation Decision Layer
 
