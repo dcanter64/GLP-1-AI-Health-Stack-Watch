@@ -38,6 +38,20 @@ from .decision_engine import (
     leaders_stack_agree,
     load_decision_history,
 )
+from .position_engine import (
+    METHODOLOGY_VERSION,
+    build_position_cards,
+    position_divergences,
+)
+from .decision_journal import (
+    append_journal_entries,
+    build_journal_entries,
+    fill_forward_outcomes,
+    load_journal,
+    persist_filled_journal,
+)
+from .accountability import build_committee_pointer, compute_accountability
+from .backtest import run_track_a, track_a_strategies, track_b_status
 from .structural_thesis import compute_structural_thesis
 from .leadership_concentration import (
     LEADER_SLEEVE_NAME,
@@ -545,6 +559,45 @@ def build_dashboard_snapshot(
     committee_decision = build_committee_decision(leader_decision, stack_decision, decision_cards)
     decision_risks = build_decision_risks(decision_cards, leader_decision, stack_decision)
 
+    # Phase 5: position-level decisions, journal, accountability, backtests.
+    # Journal writes happen only when outputs are written (dry-run purity);
+    # dry runs get an in-memory fill preview for the report.
+    sleeve_members = {s.name: list(s.tickers) for s in sleeves}
+    position_cards = build_position_cards(
+        performance_table=performance,
+        decision_cards=decision_cards,
+        opportunity_ranking=opportunity_ranking,
+        sleeves=sleeves,
+        news_events=news_events,
+    )
+    journal_entries = build_journal_entries(
+        decision_cards=decision_cards,
+        position_cards=position_cards,
+        price_history=market_snapshot.price_history,
+        methodology_version=METHODOLOGY_VERSION,
+        as_of_dt=as_of_dt,
+    )
+    if write_outputs:
+        journal = append_journal_entries(HISTORY_DIR, journal_entries, as_of_dt)
+        journal = fill_forward_outcomes(
+            journal, market_snapshot.price_history, sleeve_members
+        )
+        journal = persist_filled_journal(HISTORY_DIR, journal)
+    else:
+        journal = load_journal(HISTORY_DIR)
+        journal = fill_forward_outcomes(
+            journal, market_snapshot.price_history, sleeve_members
+        )
+    accountability_metrics = compute_accountability(
+        journal, market_snapshot.price_history, sleeve_members
+    )
+    backtest_track_a = run_track_a(
+        market_snapshot.price_history, track_a_strategies(sleeves)
+    )
+    backtest_track_b = track_b_status(journal)
+    divergences = position_divergences(position_cards)
+    committee_pointer = build_committee_pointer(divergences, accountability_metrics)
+
     snapshot = {
         "as_of_date": as_of_dt.strftime("%Y-%m-%d %H:%M UTC"),
         "lookback_days": lookback_days,
@@ -580,6 +633,13 @@ def build_dashboard_snapshot(
         "committee_decision": committee_decision,
         "decision_risks": decision_risks,
         "leader_stack_agree": leaders_stack_agree(leader_decision, stack_decision),
+        "position_cards": position_cards,
+        "journal": journal,
+        "accountability_metrics": accountability_metrics,
+        "backtest_track_a": backtest_track_a,
+        "backtest_track_b": backtest_track_b,
+        "position_divergences": divergences,
+        "committee_pointer": committee_pointer,
         "qualified_theme_count": qualified_theme_count,
         "news_top_ticker_share": round(news_top_ticker_share, 3),
         "news_top_ticker": news_top_ticker,
