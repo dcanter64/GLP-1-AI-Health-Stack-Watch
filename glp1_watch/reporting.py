@@ -297,7 +297,7 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         *opportunity_section,
         *persistence_section,
         *what_changed_section,
-        "## Change Since Prior Run",
+        "## Flywheel Score: Change Since Prior Run",
         "",
         *prior_delta_lines,
         "",

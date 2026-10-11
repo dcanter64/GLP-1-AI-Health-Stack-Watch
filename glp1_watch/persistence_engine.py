@@ -3,7 +3,12 @@
 The history store is a CSV at ``output/history/health_stack_history.csv``
 (one row per sleeve per report date) following the project's storage
 convention. Writes are upserts on (as_of_date, sleeve): a same-day rerun
-replaces its rows instead of duplicating them.
+replaces its rows instead of duplicating them. Writes are atomic
+(temp file + rename) so a mid-write crash cannot truncate the store.
+
+Streaks are keyed by sleeve name: renaming a sleeve starts a fresh history
+for the new name (the old rows remain under the old name). This is expected
+behavior — sleeve identity is the name, not the roster.
 
 Persistence metrics per sleeve (from the sorted history):
 - current / previous opportunity score
@@ -31,6 +36,9 @@ the classification, never hidden by it.
 
 from __future__ import annotations
 
+import os
+import tempfile
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -108,6 +116,13 @@ def append_history(
     if not new_frame.empty:
         new_frame["as_of_date"] = pd.to_datetime(new_frame["as_of_date"], format="%Y-%m-%d", errors="coerce")
         new_frame = new_frame.dropna(subset=["as_of_date", "sleeve"])
+        today = pd.Timestamp(date.today().isoformat())
+        future = new_frame[new_frame["as_of_date"] > today]
+        if not future.empty:
+            bad = sorted(future["as_of_date"].dt.strftime("%Y-%m-%d").unique().tolist())
+            raise ValueError(
+                f"persistence_engine: refusing to record future report date(s): {', '.join(bad)}"
+            )
     combined = (
         pd.concat([existing, new_frame], ignore_index=True)
         if not new_frame.empty
@@ -121,7 +136,18 @@ def append_history(
         combined = combined.dropna(subset=["as_of_date"])
         combined = combined.sort_values(["sleeve", "as_of_date"]).reset_index(drop=True)
         combined["as_of_date"] = combined["as_of_date"].dt.strftime("%Y-%m-%d")
-    combined.to_csv(path, index=False)
+    # Atomic write: a crash mid-write must never leave a truncated history.
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            combined.to_csv(handle, index=False)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
     return load_history(history_dir)
 
 
@@ -184,6 +210,7 @@ def compute_persistence_metrics(history: pd.DataFrame, sleeve: str) -> dict[str,
         "consecutive_deteriorating": 0,
         "consecutive_above_strong": 0,
         "consecutive_below_weak": 0,
+        "condition": None,
         "condition_began": None,
         "max_severity": float("nan"),
         "second_derivative": "insufficient",
@@ -211,8 +238,18 @@ def compute_persistence_metrics(history: pd.DataFrame, sleeve: str) -> dict[str,
     metrics["consecutive_below_weak"] = below_weak
 
     # The current condition is the longest active streak; its start date is
-    # the earliest report participating in it.
-    streak_length = max(improving, deteriorating, above_strong, below_weak)
+    # the earliest report participating in it. The winning streak is named so
+    # overlapping streaks are not ambiguous.
+    streaks = {
+        "improving": improving,
+        "deteriorating": deteriorating,
+        "above_strong": above_strong,
+        "below_weak": below_weak,
+    }
+    streak_length = max(streaks.values())
+    metrics["condition"] = (
+        max(streaks, key=lambda k: streaks[k]) if streak_length > 0 else None
+    )
     if streak_length > 0:
         streak_rows = frame.tail(streak_length + 1)
         first = streak_rows.iloc[0]["as_of_date"]
@@ -225,11 +262,14 @@ def compute_persistence_metrics(history: pd.DataFrame, sleeve: str) -> dict[str,
         else:
             metrics["max_severity"] = max(streak_scores) if streak_scores else float("nan")
 
-    # Second derivative needs three scored reports (two deltas).
+    # Second derivative needs three scored reports (two deltas). Differences
+    # below the noise floor count as steady, not (de)accelerating.
     clean_deltas = [d for d in deltas[-2:] if not pd.isna(d)]
     if len(clean_deltas) == 2:
         older, newer = clean_deltas
-        if older >= IMPROVEMENT_EPSILON and newer >= IMPROVEMENT_EPSILON:
+        if abs(newer - older) < IMPROVEMENT_EPSILON:
+            metrics["second_derivative"] = "steady"
+        elif older >= IMPROVEMENT_EPSILON and newer >= IMPROVEMENT_EPSILON:
             metrics["second_derivative"] = (
                 "accelerating" if newer > older else "decelerating"
             )
@@ -237,8 +277,6 @@ def compute_persistence_metrics(history: pd.DataFrame, sleeve: str) -> dict[str,
             metrics["second_derivative"] = (
                 "accelerating" if newer < older else "decelerating"
             )
-        elif abs(older) < IMPROVEMENT_EPSILON and abs(newer) < IMPROVEMENT_EPSILON:
-            metrics["second_derivative"] = "steady"
         else:
             metrics["second_derivative"] = "mixed"
     return metrics
@@ -301,13 +339,15 @@ def classify_readiness(
         }
 
     catalyst_3d = _column_delta(frame, "catalyst_score", 2)
-    breadth_3d = _column_delta(frame, "market_confirmation_score", 2)
+    # Breadth is measured directly via 50DMA participation, not the blended
+    # market-confirmation score (whose other components could mask narrowing).
+    breadth_3d = _column_delta(frame, "breadth_50dma", 2)
     if (
         current >= STRONG_THRESHOLD
         and not pd.isna(catalyst_3d)
         and catalyst_3d <= -5.0
         and not pd.isna(breadth_3d)
-        and breadth_3d < 0
+        and breadth_3d <= 0
     ):
         return {
             "sleeve": sleeve,
@@ -315,7 +355,7 @@ def classify_readiness(
             "note": (
                 f"strong score ({current:.1f}) with worsening catalysts "
                 f"({catalyst_3d:+.1f} over 3 reports) and narrowing breadth "
-                f"({breadth_3d:+.1f})"
+                f"({breadth_3d:+.1%} participation)"
             ),
             "conflicts": conflicts,
         }
@@ -363,6 +403,19 @@ def classify_readiness(
             "sleeve": sleeve,
             "readiness": READINESS_EARLY_SIGNAL,
             "note": "one improving report",
+            "conflicts": conflicts,
+        }
+    deteriorating = int(metrics["consecutive_deteriorating"])
+    if deteriorating > 0:
+        # The spec defines no readiness state for pure deterioration; say so
+        # plainly instead of claiming there is no directional signal.
+        return {
+            "sleeve": sleeve,
+            "readiness": READINESS_INSUFFICIENT,
+            "note": (
+                f"deteriorating for {deteriorating} consecutive report(s) — "
+                "the readiness set has no deterioration state; monitoring"
+            ),
             "conflicts": conflicts,
         }
     return {
