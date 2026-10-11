@@ -31,6 +31,10 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "health_stack_
 #: Tickers reserved as comparators; never sleeve members.
 COMPARATOR_TICKERS = ("XLV", "QQQ", "SPY")
 
+#: The supporting (non-required) sleeve: explicit classifier input and reported,
+#: but excluded from core health-stack breadth counts.
+SUPPORTING_SLEEVE_NAME = "AI Infrastructure Enablers"
+
 #: Structural expectation for Phase 1: exactly these sleeves are required.
 #: Core health-stack breadth counts are calculated from these seven only.
 EXPECTED_REQUIRED_SLEEVES = frozenset(
