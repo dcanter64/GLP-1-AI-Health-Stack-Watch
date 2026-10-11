@@ -91,6 +91,17 @@ class EventClusteringTests(unittest.TestCase):
         counts = summarize_event_counts(events)
         self.assertEqual(counts, {"unique_events": 0, "material_events": 0, "multi_source_events": 0})
 
+    def test_source_count_is_case_insensitive(self) -> None:
+        title = "Eli Lilly sues Novo Nordisk over weight loss advertisements in federal court"
+        articles = pd.DataFrame(
+            [
+                make_article(title, source="Reuters", tickers="LLY, NVO"),
+                make_article(title, source="reuters", tickers="LLY, NVO"),
+            ]
+        )
+        _, events = cluster_news_events(articles)
+        self.assertEqual(events.iloc[0]["independent_sources"], 1)
+
     def test_event_tickers_union_and_headline(self) -> None:
         title = "Eli Lilly sues Novo Nordisk over weight loss advertisements in federal court"
         articles = pd.DataFrame(
