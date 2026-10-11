@@ -31,6 +31,11 @@ def base_inputs(**overrides) -> dict:
         "leader_status": "mixed",
         "market_data_quality": "High",
         "core_coverage": 0.9,
+        "qualified_theme_count": 4,
+        "news_top_ticker_share": 0.2,
+        "news_top_ticker": "LLY",
+        "leader_tickers": ("LLY", "NVO"),
+        "supporting_sleeve_status": "confirming",
     }
     inputs.update(overrides)
     return inputs
@@ -123,6 +128,88 @@ class ConfirmationStateTests(unittest.TestCase):
             )
         )
         self.assertEqual(result["state"], STATE_SELECTIVELY_CONFIRMING)
+
+    def test_catalyst_breadth_constrains_broadly(self) -> None:
+        # Narrow catalyst breadth (fewer than 3 qualified themes) blocks
+        # Broadly Confirming even when every market input is strong.
+        result = classify_confirmation_state(
+            **base_inputs(
+                overall_score=75,
+                confirming_count=5,
+                breadth_50dma=0.7,
+                concentration_verdict="broad",
+                qualified_theme_count=2,
+            )
+        )
+        self.assertEqual(result["state"], STATE_SELECTIVELY_CONFIRMING)
+
+    def test_news_concentration_constrains_broadly(self) -> None:
+        # One ticker dominating coverage blocks Broadly Confirming.
+        result = classify_confirmation_state(
+            **base_inputs(
+                overall_score=75,
+                confirming_count=5,
+                breadth_50dma=0.7,
+                concentration_verdict="broad",
+                news_top_ticker_share=0.55,
+                news_top_ticker="VKTX",
+            )
+        )
+        self.assertEqual(result["state"], STATE_SELECTIVELY_CONFIRMING)
+
+    def test_news_concentration_on_leader_triggers_leader_dependent(self) -> None:
+        # Coverage dominated by a leader-sleeve ticker while the leader
+        # confirms reads as Leader-Dependent even without market concentration.
+        result = classify_confirmation_state(
+            **base_inputs(
+                concentration_verdict="selective",
+                leader_status="confirming",
+                confirming_count=1,
+                news_top_ticker_share=0.65,
+                news_top_ticker="LLY",
+            )
+        )
+        self.assertEqual(result["state"], STATE_LEADER_DEPENDENT)
+
+    def test_news_concentration_on_non_leader_does_not_trigger(self) -> None:
+        # Dominant coverage of a non-leader ticker is not leader dependence.
+        result = classify_confirmation_state(
+            **base_inputs(
+                concentration_verdict="selective",
+                leader_status="confirming",
+                confirming_count=1,
+                deteriorating_count=1,
+                news_top_ticker_share=0.65,
+                news_top_ticker="VKTX",
+            )
+        )
+        self.assertNotEqual(result["state"], STATE_LEADER_DEPENDENT)
+
+    def test_supporting_sleeve_deterioration_caps_broadly(self) -> None:
+        # A deteriorating AI Infrastructure sleeve blocks Broadly Confirming:
+        # semiconductor strength can never upgrade the read, and its
+        # deterioration constrains it.
+        result = classify_confirmation_state(
+            **base_inputs(
+                overall_score=75,
+                confirming_count=5,
+                breadth_50dma=0.7,
+                concentration_verdict="broad",
+                supporting_sleeve_status="deteriorating",
+            )
+        )
+        self.assertEqual(result["state"], STATE_SELECTIVELY_CONFIRMING)
+
+    def test_supporting_sleeve_cannot_upgrade_weak_stack(self) -> None:
+        # A confirming supporting sleeve must not rescue a deteriorating stack.
+        result = classify_confirmation_state(
+            **base_inputs(
+                deteriorating_count=4,
+                confirming_count=0,
+                supporting_sleeve_status="confirming",
+            )
+        )
+        self.assertEqual(result["state"], STATE_DETERIORATING)
 
     def test_leader_dependent_beats_selective(self) -> None:
         # 3 confirming sleeves would be "selectively confirming", but the
