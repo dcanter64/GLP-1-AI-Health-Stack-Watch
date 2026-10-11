@@ -11,7 +11,11 @@ from .confirmation_state import (
     build_contradiction,
     classify_confirmation_state,
 )
-from .health_stack_sleeves import core_breadth_tickers, load_sleeve_config
+from .health_stack_sleeves import (
+    SUPPORTING_SLEEVE_NAME,
+    core_breadth_tickers,
+    load_sleeve_config,
+)
 from .leadership_concentration import (
     LEADER_SLEEVE_NAME,
     SLEEVE_STATUS_INSUFFICIENT,
@@ -332,8 +336,13 @@ def build_dashboard_snapshot(
         news_top_ticker_share = (
             float(news_snapshot.accepted_by_ticker["story_count"].max()) / accepted_total
         )
+        news_top_ticker: str | None = str(news_snapshot.accepted_by_ticker.iloc[0]["ticker"])
     else:
         news_top_ticker_share = 0.0
+        news_top_ticker = None
+    leader_tickers = tuple(
+        next(sleeve.tickers for sleeve in sleeves if sleeve.name == LEADER_SLEEVE_NAME)
+    )
     core_names = core_breadth_tickers(sleeves)
     if not performance.empty and core_names:
         core_returns = pd.to_numeric(
@@ -343,12 +352,13 @@ def build_dashboard_snapshot(
         core_coverage = len(core_returns) / len(core_names)
     else:
         core_coverage = 0.0
-    if not sleeve_summaries.empty and LEADER_SLEEVE_NAME in sleeve_summaries["sleeve"].values:
-        leader_status = str(
-            sleeve_summaries.set_index("sleeve").loc[LEADER_SLEEVE_NAME, "status"]
-        )
-    else:
-        leader_status = SLEEVE_STATUS_INSUFFICIENT
+    def _sleeve_status_lookup(name: str) -> str:
+        if sleeve_summaries.empty or name not in sleeve_summaries["sleeve"].values:
+            return SLEEVE_STATUS_INSUFFICIENT
+        return str(sleeve_summaries.set_index("sleeve").loc[name, "status"])
+
+    leader_status = _sleeve_status_lookup(LEADER_SLEEVE_NAME)
+    supporting_sleeve_status = _sleeve_status_lookup(SUPPORTING_SLEEVE_NAME)
     confirmation = classify_confirmation_state(
         overall_score=score_snapshot.overall_score,
         confirming_count=int(concentration["confirming_count"]),
@@ -358,6 +368,11 @@ def build_dashboard_snapshot(
         leader_status=leader_status,
         market_data_quality=str(market_data_quality.get("status", "Unknown")),
         core_coverage=float(core_coverage),
+        qualified_theme_count=qualified_theme_count,
+        news_top_ticker_share=news_top_ticker_share,
+        news_top_ticker=news_top_ticker,
+        leader_tickers=leader_tickers,
+        supporting_sleeve_status=supporting_sleeve_status,
     )
     leader_assessment = assess_leader(leader_status, score_snapshot.lly_ai_trade_score)
     stack_assessment = assess_stack(confirmation["state"])
@@ -408,6 +423,8 @@ def build_dashboard_snapshot(
         "news_event_counts": news_event_counts,
         "qualified_theme_count": qualified_theme_count,
         "news_top_ticker_share": round(news_top_ticker_share, 3),
+        "news_top_ticker": news_top_ticker,
+        "supporting_sleeve_status": supporting_sleeve_status,
         "rejected_articles": news_snapshot.rejected_articles,
         "theme_summary": news_snapshot.theme_summary,
         "sentiment_summary": news_snapshot.sentiment_summary,
