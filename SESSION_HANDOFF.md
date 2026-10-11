@@ -104,7 +104,15 @@ Phase 3 completion checks:
    - M3: second derivative treats sub-noise-floor delta differences as steady.
    - Minors: deterioration fallthrough note corrected; Exhausted uses direct breadth_50dma with <= 0 gate; future dates rejected; sleeve-rename streak behavior documented; section renamed to "Flywheel Score: Change Since Prior Run"; `condition` field names the winning streak.
    - Verified correct: all 13 spec test items genuinely covered; all 7 readiness states reachable with spec examples holding; precedence total and correctly ordered; conflicting evidence attached; NaN-safe; Phase 1/2 untouched; no allocation tiers.
-2. Live validation run — pending.
+2. ~~Live validation run~~ done 2026-10-11: full snapshot on real data (Neutral, 42.8); Decision Layer §§1-8 render; all sleeves honestly HOLD/not-rated on the cold-start first decision report; `decision_history.csv` recorded.
+3. ~~Operator merge approval~~ granted 2026-10-11; PR #3 merged as c8840b8 (verified byte-identical).
+
+## Phase 4 status (2026-10-11)
+
+Implemented on branch `muse/phase-4-decision-layer` (not pushed yet — single-push rule).
+Completion checks:
+1. ~~Adversarial review~~ done 2026-10-11 (separate agent, empirical, ~120 assertions): 0 critical, 1 major, 5 minor — all fixed and re-verified on the branch (see CHANGELOG).
+2. Live validation — done (see above).
 3. Operator merge approval — pending.
 
 ## Phase Gate
