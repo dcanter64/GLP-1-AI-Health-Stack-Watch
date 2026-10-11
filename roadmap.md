@@ -167,17 +167,21 @@ See `PHASE_1_IMPLEMENTATION_PLAN.md` for the implementation plan.
 
 ### Phase 2: Add Sleeve-Level Opportunity Scoring
 
-Status: gated; do not begin until Phase 1 is reviewed and approved.
+Status: implemented 2026-10-11 on branch `muse/phase-2-opportunity-scoring`; pending adversarial review and live validation.
 
-Planned additions:
+Implemented:
 
-- Rename/clarify the current overall score as the Health Stack Flywheel Score.
-- Add Structural Thesis Score.
-- Add Market Confirmation Score.
-- Add Catalyst Score.
-- Add Expectations Risk Score.
-- Add sleeve-level Opportunity Scores and trend classifications.
-- Add `Health Stack Opportunity Ranking` to the report.
+- Overall score renamed/clarified as the Health Stack Flywheel Score (labels only; `overall_score` snapshot key unchanged).
+- Structural Thesis Score per sleeve (news-evidence proxy, Bayesian-smoothed to 50-neutral with no data).
+- Market Confirmation Score per sleeve (returns, RS breadth vs XLV/SPY/QQQ, trend position, drawdown, momentum pace, volatility, concentration).
+- Catalyst Score per sleeve (unique material events across six categories, sentiment-signed, per-category saturation).
+- Expectations Risk Score per sleeve (acceleration, extension, no-drawdown, narrow leadership, news saturation; confidence capped at Medium — no valuation data).
+- Sleeve Opportunity Scores (0.35/0.25/0.20/0.20 blend, expectations risk inverted) with six trend labels and recognition-gap flags.
+- `Health Stack Opportunity Ranking` report section plus Streamlit expander.
+- All weights/thresholds in `config/decision_weights.yaml` with loud validation.
+- 42 new tests; full suite 137 total / 133 passing (4 pre-existing `test_news.py` date-window failures, fail on master too).
+
+Documented Phase 2 limitations: Structural Thesis is a news-evidence proxy (no fundamentals feed); Expectations Risk has reduced confidence (no valuation/earnings-revision data); trend labels use a stateless 1M-vs-3M pace proxy until Phase 3 persistence; the partnership catalyst category shares the M&A theme (no dedicated partnership theme in the current theme set).
 
 ### Phase 3: Add Persistence, History, and Recommendation Readiness
 

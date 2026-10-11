@@ -125,10 +125,89 @@ def build_confirmation_structure_section(snapshot: dict) -> list[str]:
     return lines
 
 
+def _format_score(value: object) -> str:
+    parsed = pd.to_numeric(value, errors="coerce")
+    if pd.isna(parsed):
+        return "n/a"
+    return f"{float(parsed):.1f}"
+
+
+def build_opportunity_ranking_section(snapshot: dict) -> list[str]:
+    """Phase 2: Health Stack Opportunity Ranking report section."""
+    ranking = snapshot.get("opportunity_ranking")
+    lines = ["## Health Stack Opportunity Ranking", ""]
+    if ranking is None or getattr(ranking, "empty", True):
+        lines.extend(
+            [
+                "Opportunity scoring unavailable for this run.",
+                "",
+            ]
+        )
+        return lines
+
+    lines.extend(
+        [
+            "| Rank | Sleeve | Opportunity Score | Structural Score | "
+            "Market Confirmation | Catalyst Score | Expectations Risk | Trend |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for _, row in ranking.iterrows():
+        rank = row.get("rank")
+        rank_text = str(int(rank)) if pd.notna(rank) else "n/a"
+        support = "" if row.get("required") else " (supporting)"
+        lines.append(
+            f"| {rank_text} | {row.get('sleeve')}{support} | "
+            f"{_format_score(row.get('opportunity_score'))} | "
+            f"{_format_score(row.get('structural_score'))} | "
+            f"{_format_score(row.get('market_confirmation_score'))} | "
+            f"{_format_score(row.get('catalyst_score'))} | "
+            f"{_format_score(row.get('expectations_risk_score'))} | "
+            f"{row.get('trend', 'Unknown')} |"
+        )
+    lines.append("")
+
+    # Decision-neutral interpretation: where evidence is strongest/weakest.
+    scored = ranking[ranking["required"] & ranking["opportunity_score"].notna()]
+    if not scored.empty:
+        strongest = scored.iloc[0]
+        weakest = scored.iloc[-1]
+        lines.append(
+            f"- Strongest evidence: {strongest['sleeve']} "
+            f"(opportunity {_format_score(strongest['opportunity_score'])}: "
+            f"{strongest['interpretation']}, trend {strongest['trend']})."
+        )
+        if len(scored) > 1:
+            lines.append(
+                f"- Weakest evidence: {weakest['sleeve']} "
+                f"(opportunity {_format_score(weakest['opportunity_score'])}: "
+                f"{weakest['interpretation']}, trend {weakest['trend']})."
+            )
+    gaps = ranking[ranking["recognition_gap"] == True]  # noqa: E712
+    for _, row in gaps.iterrows():
+        lines.append(
+            f"- Recognition gap: {row['sleeve']} shows strong structural and "
+            "catalyst evidence the market has not yet confirmed."
+        )
+    lines.extend(
+        [
+            "- This section is analytical only; it issues no allocation tiers or "
+            "portfolio actions.",
+            "- Data limitations: the Structural Thesis Score is a news-evidence "
+            "proxy (no fundamentals feed); Expectations Risk carries reduced "
+            "confidence (no valuation or earnings-revision data); trend labels "
+            "use a stateless 1M-vs-3M pace proxy until Phase 3 persistence.",
+            "",
+        ]
+    )
+    return lines
+
+
 def write_report(snapshot: dict, as_of_stamp: str) -> Path:
     ensure_output_dirs()
     path = REPORTS_DIR / f"glp1_ai_health_stack_watch_{as_of_stamp}.md"
     confirmation_section = build_confirmation_structure_section(snapshot)
+    opportunity_section = build_opportunity_ranking_section(snapshot)
     top_stories = select_key_stories(snapshot["articles"], limit=10)
     news_stats = snapshot["news_stats"]
     market_quality = snapshot.get("market_data_quality", {})
@@ -140,7 +219,7 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         "## Executive Summary",
         "",
         f"- Current stance: {snapshot['stance']}",
-        f"- Overall score: {snapshot['overall_score']:.1f}",
+        f"- Health Stack Flywheel Score: {snapshot['overall_score']:.1f}",
         f"- News confidence: {snapshot['news_confidence']}",
         f"- Market data quality: {market_quality.get('status', 'Unknown')}",
         f"- Market data note: {market_quality.get('note', 'No market data quality audit available.')}",
@@ -149,6 +228,7 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         f"- Negative score drivers: {', '.join(snapshot['negative_drivers']) if snapshot['negative_drivers'] else 'None'}",
         "",
         *confirmation_section,
+        *opportunity_section,
         "## Change Since Prior Run",
         "",
         *prior_delta_lines,

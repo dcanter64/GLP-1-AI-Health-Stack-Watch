@@ -1,0 +1,50 @@
+# Decision-layer weights and thresholds for Phase 2 opportunity scoring.
+#
+# All weight groups must sum to 1.0 (within 1e-6) and contain no negative
+# weights; violations raise loudly in glp1_watch/decision_weights.py.
+# Interpretation bands must be sorted descending and cover 0-100.
+
+opportunity_weights:
+  market_confirmation: 0.35
+  structural_thesis: 0.25
+  catalyst: 0.20
+  expectations_risk: 0.20
+
+market_confirmation_weights:
+  absolute_3m: 0.25
+  rs_breadth: 0.25
+  trend_position: 0.20
+  drawdown: 0.10
+  momentum_pace: 0.10
+  volatility: 0.05
+  concentration: 0.05
+
+expectations_risk_weights:
+  acceleration: 0.25
+  extension: 0.25
+  no_drawdown: 0.20
+  narrow_leadership: 0.15
+  news_saturation: 0.15
+
+# Score -> interpretation, first matching threshold wins (descending).
+interpretation_bands:
+  - [80, "Strong opportunity"]
+  - [65, "Attractive"]
+  - [55, "Selectively attractive"]
+  - [45, "Neutral"]
+  - [35, "Weak"]
+  - [20, "Avoid broad exposure"]
+  - [0, "Broken or highly speculative"]
+
+# Per-category saturation: net signed material events beyond this add nothing,
+# so raw event counts cannot dominate the catalyst score.
+catalyst_saturation_per_category: 3
+
+# Trend classification thresholds on the opportunity score.
+trend_strong_threshold: 65
+trend_weak_threshold: 45
+
+# Recognition gap: strong thesis and catalysts but weak market confirmation.
+recognition_gap_structural_min: 60
+recognition_gap_catalyst_min: 60
+recognition_gap_market_max: 45
