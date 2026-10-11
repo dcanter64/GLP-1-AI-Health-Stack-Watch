@@ -2,15 +2,26 @@
 
 ## Unreleased
 
+### Added (Phase 1, 2026-10-11; on branch `muse/phase-1-confirmation-structure`, pending review)
+
+- `config/health_stack_sleeves.yaml`: eight configurable health-stack sleeves (seven required + supporting AI Infrastructure Enablers) with operator-approved rosters.
+- `glp1_watch/health_stack_sleeves.py`: YAML loader with loud validation — unknown tickers, duplicate membership across sleeves, comparator tickers (XLV/QQQ/SPY) as members, and a wrong required-sleeve set all raise `ValueError`.
+- `glp1_watch/leadership_concentration.py`: sleeve-level market summaries (3M return, RS vs XLV/SPY, 50/200DMA participation, best/worst names, confirming/mixed/deteriorating/insufficient-data status) and leadership-concentration analysis (broad/selective/leader-dependent). Core breadth counts use the seven required sleeves only.
+- `glp1_watch/confirmation_state.py`: precedence-ordered eight-state confirmation classifier (Broadly Confirming, Selectively Confirming, Leader-Dependent, Fragmenting, Early Repair, Deteriorating, Failing, Insufficient Evidence), separate leader/stack assessments, and a leader-vs-stack contradiction line.
+- `glp1_watch/news_event_clustering.py`: heuristic news-event clustering with unique-event, independent-source, and material-event counts (documented as directional, not precise).
+- New report section `Health Stack Confirmation Structure` (after Executive Summary) plus a matching Streamlit expander; legacy snapshots without Phase 1 keys keep byte-identical report output.
+- 38 new tests: `test_health_stack_sleeves.py`, `test_leadership_concentration.py`, `test_confirmation_state.py`, `test_news_event_clustering.py`.
+- Added `pyyaml>=6.0` to `requirements.txt`.
+
 ### Planned
 
-- Begin a phased upgrade from a descriptive GLP-1 AI Health Stack dashboard toward a capital-allocation decision layer.
-- Phase 1 will add configurable health-stack sleeves, confirmation-state classification, leader-concentration analysis, leader-vs-stack conclusions, and news event clustering.
+- Phase 2 (sleeve-level opportunity scoring) is gated: do not begin until Phase 1 is reviewed and approved.
 - Later phases are gated and will not begin until the prior phase has been reviewed and approved.
 - Preserve the full Phase 1-5 upgrade specification in `DECISION_LAYER_UPGRADE_SPEC.md`.
 
 ### Recent Baseline
 
 - Latest documented live run: 2026-07-26 13:34 UTC.
-- Current documented tests: 38 passing.
-- Current project status: v1 dashboard complete; decision-layer upgrade planned.
+- Current documented tests: 38 passing (pre-Phase-1 baseline).
+- Phase 1 test state: 76 tests total — 72 passing, including all 38 new Phase 1 tests. Four `test_news.py` failures are pre-existing date-window artifacts (hardcoded 2026-07-08 fixtures aged past the 21-day news window as of 2026-10-11); they fail on master too and are unrelated to Phase 1.
+- Current project status: v1 dashboard complete; Phase 1 implemented on branch, pending adversarial review and a live validation run from a normal Windows shell (Yahoo/RSS are unreachable from the Codex sandbox and this agent's VM).
