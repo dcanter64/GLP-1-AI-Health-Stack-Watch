@@ -199,6 +199,21 @@ class ConcentrationTests(unittest.TestCase):
         concentration = compute_leadership_concentration(performance, summaries, sleeves)
         self.assertIsNone(concentration["lly_contribution"])
 
+    def test_missing_rs_columns_give_insufficient_not_deteriorating(self) -> None:
+        # Without relative-strength data the sleeve must not fabricate a
+        # "deteriorating" signal from a defaulted 0.0 share.
+        sleeves = make_sleeves()
+        performance = pd.DataFrame(
+            [
+                {"ticker": "LLY", "price": 100.0, "return_3m": -0.10},
+                {"ticker": "NVO", "price": 100.0, "return_3m": -0.12},
+            ]
+        )
+        summaries = build_sleeve_summaries(performance, sleeves).set_index("sleeve")
+        self.assertEqual(
+            summaries.loc["Established GLP-1 Leaders", "status"], SLEEVE_STATUS_INSUFFICIENT
+        )
+
     def test_empty_performance_gives_insufficient_verdict(self) -> None:
         sleeves = make_sleeves()
         summaries = build_sleeve_summaries(pd.DataFrame(), sleeves)
