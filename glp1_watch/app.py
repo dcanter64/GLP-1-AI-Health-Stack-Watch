@@ -160,8 +160,52 @@ def render_confirmation_structure(snapshot: dict) -> None:
             f"({event_counts.get('material_events', 0)} material)"
         )
         st.caption(f"Main contradiction: {snapshot.get('main_contradiction', 'None identified')}")
+    render_decision_layer(snapshot)
     render_opportunity_ranking(snapshot)
     render_persistence_readiness(snapshot)
+
+
+def render_decision_layer(snapshot: dict) -> None:
+    """Phase 4: Capital Allocation Decision Layer display."""
+    cards = snapshot.get("decision_cards") or []
+    if not cards:
+        return
+    with st.expander("Capital Allocation Decision Layer", expanded=True):
+        st.write(snapshot.get("committee_decision", ""))
+        leader = snapshot.get("leader_decision") or {}
+        stack = snapshot.get("stack_decision") or {}
+        st.write(f"**Leader:** {leader.get('headline', 'n/a')}")
+        st.write(f"**Stack:** {stack.get('headline', 'n/a')}")
+        if not snapshot.get("leader_stack_agree", True):
+            st.warning("Leader and Stack decisions disagree — size the leader independently of broad-stack exposure.")
+        rows = [
+            {
+                "Sleeve": c["sleeve"],
+                "Recommendation": c["recommendation"],
+                "Tier": (
+                    f"{c['previous_tier']} → {c['recommended_tier']}"
+                    if c["previous_tier"] is not None and c["recommended_tier"] is not None
+                    else (str(c["recommended_tier"]) if c["recommended_tier"] is not None else "not rated")
+                ),
+                "Confidence": f"{c['confidence']:.0f} ({c['confidence_band']})",
+                "Urgency": c["urgency"],
+                "Speed": c["implementation_speed"],
+            }
+            for c in cards
+        ]
+        import pandas as pd
+
+        st.dataframe(pd.DataFrame(rows), width="stretch")
+        st.caption(
+            "Tiers are conviction statements (0 Avoid, 1 Exploratory, 2 Normal, "
+            "3 Overweight, 4 Maximum-conviction overweight), not portfolio "
+            "percentages. Analytical only — no orders placed."
+        )
+        risks = snapshot.get("decision_risks") or []
+        if risks:
+            st.write("**Decision risks**")
+            for risk in risks:
+                st.write(f"- {risk}")
 
 
 def render_persistence_readiness(snapshot: dict) -> None:

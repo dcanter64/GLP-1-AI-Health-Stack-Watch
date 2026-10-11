@@ -24,6 +24,7 @@ REQUIRED_WEIGHT_GROUPS = (
     "opportunity_weights",
     "market_confirmation_weights",
     "expectations_risk_weights",
+    "confidence_weights",
 )
 
 #: Exact expected key sets. The scorers look up these keys directly, so a
@@ -58,6 +59,19 @@ EXPECTED_WEIGHT_KEYS = {
             "news_saturation",
         }
     ),
+    "confidence_weights": frozenset(
+        {
+            "signal_persistence",
+            "price_fundamentals_agreement",
+            "breadth",
+            "data_quality",
+            "catalyst_diversity",
+            "leadership_concentration",
+            "time_horizon_agreement",
+            "conflict_degree",
+            "historical_stability",
+        }
+    ),
 }
 
 
@@ -68,6 +82,7 @@ class DecisionWeights:
     opportunity: dict[str, float]
     market_confirmation: dict[str, float]
     expectations_risk: dict[str, float]
+    confidence: dict[str, float]
     interpretation_bands: tuple[tuple[float, str], ...]
     catalyst_saturation_per_category: int
     trend_strong_threshold: float
@@ -192,6 +207,7 @@ def load_decision_weights(path: str | Path = CONFIG_PATH) -> DecisionWeights:
         opportunity=groups["opportunity_weights"],
         market_confirmation=groups["market_confirmation_weights"],
         expectations_risk=groups["expectations_risk_weights"],
+        confidence=groups["confidence_weights"],
         interpretation_bands=bands,
         catalyst_saturation_per_category=int(_positive_number("catalyst_saturation_per_category")),
         trend_strong_threshold=trend_strong,

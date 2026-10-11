@@ -198,7 +198,7 @@ Documented Phase 3 limitations: history starts cold (no backfill of pre-Phase-3 
 
 ### Phase 4: Add the Capital Allocation Decision Layer
 
-Status: gated; do not begin until Phase 3 is reviewed and approved.
+Status: in progress — implemented on branch `muse/phase-4-decision-layer`, awaiting adversarial review and merge approval. (Operator greenlit all 8 design recommendations 2026-10-11.)
 
 Planned additions:
 
