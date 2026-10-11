@@ -96,6 +96,17 @@ class CatalystScoreTests(unittest.TestCase):
         result = compute_catalyst_score(events, articles, make_sleeves()).set_index("sleeve")
         self.assertEqual(result.loc["Established GLP-1 Leaders", "catalyst_score"], 0.0)
 
+    def test_unsigned_event_does_not_inflate_confidence(self) -> None:
+        # A mapped-theme event with no articles (sign 0) moves no category and
+        # must not lift confidence to Medium on a 0.0 score.
+        events = pd.DataFrame([make_event("EVT-001", "LLY", "GLP-1 Demand")])
+        result = compute_catalyst_score(
+            events, pd.DataFrame(), make_sleeves()
+        ).set_index("sleeve")
+        row = result.loc["Established GLP-1 Leaders"]
+        self.assertEqual(row["catalyst_score"], 0.0)
+        self.assertEqual(row["confidence"], "Low")
+
     def test_empty_events(self) -> None:
         result = compute_catalyst_score(
             pd.DataFrame(), pd.DataFrame(), make_sleeves()

@@ -95,6 +95,38 @@ class DecisionWeightsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "trend_weak_threshold"):
             load_decision_weights(_write(body))
 
+    def test_rejects_wrong_weight_keys(self) -> None:
+        # Sums to 1.0 with no negatives, but the blender looks up the four
+        # expected keys directly: this must fail loudly, not KeyError later.
+        body = VALID_YAML.replace("expectations_risk: 0.20", "totally_bogus_key: 0.20")
+        with self.assertRaisesRegex(ValueError, "unknown keys"):
+            load_decision_weights(_write(body))
+
+    def test_rejects_missing_opportunity_key(self) -> None:
+        # Component groups tolerate subsets (renormalize + note), but the
+        # opportunity blender needs all four keys.
+        body = VALID_YAML.replace("  catalyst: 0.20\n", "").replace(
+            "structural_thesis: 0.25", "structural_thesis: 0.45"
+        )
+        with self.assertRaisesRegex(ValueError, "must define all"):
+            load_decision_weights(_write(body))
+
+    def test_rejects_boolean_weight(self) -> None:
+        body = VALID_YAML.replace("market_confirmation: 0.35", "market_confirmation: yes")
+        with self.assertRaisesRegex(ValueError, "boolean"):
+            load_decision_weights(_write(body))
+
+    def test_rejects_out_of_range_threshold(self) -> None:
+        body = VALID_YAML.replace(
+            "recognition_gap_structural_min: 60", "recognition_gap_structural_min: 500"
+        )
+        with self.assertRaisesRegex(ValueError, "within"):
+            load_decision_weights(_write(body))
+
+    def test_interpret_nan_is_insufficient_data(self) -> None:
+        weights = load_decision_weights()
+        self.assertEqual(interpret_opportunity(float("nan"), weights), "Insufficient data")
+
     def test_valid_minimal_config_loads(self) -> None:
         weights = load_decision_weights(_write(VALID_YAML))
         self.assertAlmostEqual(sum(weights.opportunity.values()), 1.0)

@@ -47,9 +47,11 @@ def _trend_label(
     else:
         level = "Weak"
     # Stateless momentum proxy: recent monthly pace versus 3M monthly pace.
+    # Without pace data the direction is unknowable, so the trend is Unknown
+    # rather than a seventh label outside the spec's closed set.
     if np.isnan(return_1m) or np.isnan(return_3m):
-        direction = "direction unknown"
-    elif return_1m >= return_3m / 3:
+        return "Unknown"
+    if return_1m >= return_3m / 3:
         direction = "improving"
     else:
         direction = "decelerating" if level == "Strong" else "deteriorating"
@@ -61,7 +63,7 @@ def _trend_label(
         ("Weak", "improving"): "Weak but improving",
         ("Weak", "deteriorating"): "Weak and deteriorating",
     }
-    return mapping.get((level, direction), f"{level} ({direction})")
+    return mapping[(level, direction)]
 
 
 def compute_opportunity_scores(
@@ -177,7 +179,9 @@ def compute_opportunity_scores(
                 sub = frame[frame["sleeve"] == name]
                 if not sub.empty:
                     confidences.append(str(sub.iloc[0][column]))
-        confidence = "Low" if "Low" in confidences else ("Medium" if "Medium" in confidences else "High")
+        # Expectations-risk confidence is capped at Medium by spec (no
+        # valuation data), so opportunity confidence tops out at Medium too.
+        confidence = "Low" if "Low" in confidences else "Medium"
         rows.append(
             {
                 "sleeve": name,

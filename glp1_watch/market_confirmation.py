@@ -119,12 +119,16 @@ def compute_market_confirmation(
 
         r3m = _mean_or_nan(frame["return_3m"]) if "return_3m" in frame.columns else float("nan")
         r1m = _mean_or_nan(frame["return_1m"]) if "return_1m" in frame.columns else float("nan")
-        rs_shares = [
-            _mean_or_nan((pd.to_numeric(frame[col], errors="coerce") > 0).astype(float))
-            for col in ("rs_vs_xlv", "rs_vs_spy", "rs_vs_qqq")
-            if col in frame.columns
-        ]
-        rs_shares = [s for s in rs_shares if not np.isnan(s)]
+        # NaN RS values must be masked BEFORE the > 0 comparison: NaN > 0 is
+        # False, which would fabricate a 0.0 share (deterioration) during a
+        # benchmark outage instead of skipping the component.
+        rs_shares = []
+        for col in ("rs_vs_xlv", "rs_vs_spy", "rs_vs_qqq"):
+            if col not in frame.columns:
+                continue
+            series = pd.to_numeric(frame[col], errors="coerce").dropna()
+            if not series.empty:
+                rs_shares.append(float((series > 0).mean()))
         above_50 = _mean_or_nan(frame["above_50dma"].astype(float)) if "above_50dma" in frame.columns else float("nan")
         above_200 = _mean_or_nan(frame["above_200dma"].astype(float)) if "above_200dma" in frame.columns else float("nan")
         drawdown = (
@@ -154,11 +158,13 @@ def compute_market_confirmation(
 
         available = {k: v for k, v in components.items() if k in configured}
         missing = sorted(set(configured) - set(available))
-        if available:
-            weight_sum = sum(configured[k] for k in available)
+        weight_sum = sum(configured[k] for k in available)
+        if available and weight_sum > 0:
             score = sum(components[k] * configured[k] for k in available) / weight_sum
         else:
             score = float("nan")
+            if available and not missing:
+                missing = ["all configured weight on missing components"]
         if coverage >= 0.9 and not missing:
             confidence, note = "High", "full component coverage"
         elif not missing:

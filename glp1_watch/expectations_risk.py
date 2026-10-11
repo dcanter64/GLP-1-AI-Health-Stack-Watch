@@ -170,11 +170,13 @@ def compute_expectations_risk(
 
         available = {k: v for k, v in components.items() if k in configured}
         missing = sorted(set(configured) - set(available))
-        if available:
-            weight_sum = sum(configured[k] for k in available)
+        weight_sum = sum(configured[k] for k in available)
+        if available and weight_sum > 0:
             score = sum(components[k] * configured[k] for k in available) / weight_sum
         else:
             score = float("nan")
+            if available and not missing:
+                missing = ["all configured weight on missing components"]
         # Valuation and earnings-revision data are unavailable: confidence is
         # capped at Medium by spec, never invented.
         if np.isnan(score):
