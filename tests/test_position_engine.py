@@ -300,7 +300,23 @@ class TickerTierTests(unittest.TestCase):
         )
         self.assertEqual(card["status"], "Insufficient Evidence / Not Rated")
         self.assertIsNone(card["tier"])
-        self.assertEqual(card["recommendation"], "HOLD")
+        # M3: HOLD is an actionable call; not-rated cards say NOT RATED.
+        self.assertEqual(card["recommendation"], pe.REC_NOT_RATED)
+
+    def test_safe_bool_degrades_to_none(self):
+        # M6: missing scalar values degrade to Not Rated, never crash.
+        self.assertIsNone(pe._safe_bool(pd.NA))
+        self.assertIsNone(pe._safe_bool(None))
+        self.assertIsNone(pe._safe_bool(float("nan")))
+        self.assertTrue(pe._safe_bool(True))
+        self.assertFalse(pe._safe_bool(False))
+
+    def test_pd_na_technicals_yield_not_rated(self):
+        perf = make_perf(above_200dma=pd.NA)
+        self.assertEqual(
+            classify(perf, make_sleeve_card()),
+            "Insufficient Evidence / Not Rated",
+        )
 
 
 if __name__ == "__main__":
