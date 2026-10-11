@@ -29,9 +29,74 @@ def write_articles_csv(articles_df: pd.DataFrame, as_of_stamp: str) -> Path:
     return path
 
 
+def build_confirmation_structure_section(snapshot: dict) -> list[str]:
+    """Phase 1 section: sleeve confirmation, concentration, and event counts.
+
+    Returns an empty list when the snapshot predates Phase 1 (keys missing),
+    so legacy snapshots keep byte-identical report output.
+    """
+    state = snapshot.get("confirmation_state")
+    if not state:
+        return []
+    concentration = snapshot.get("leadership_concentration", {}) or {}
+    event_counts = snapshot.get("news_event_counts", {}) or {}
+    summaries = snapshot.get("sleeve_summaries")
+    confirming = concentration.get("confirming_sleeves", []) or []
+    deteriorating = concentration.get("deteriorating_sleeves", []) or []
+    lines = [
+        "## Health Stack Confirmation Structure",
+        "",
+        f"- Confirmation state: {state} ({snapshot.get('confirmation_reason', '')})",
+        f"- Leader assessment: {snapshot.get('leader_assessment', 'Unknown')}",
+        f"- Stack assessment: {snapshot.get('stack_assessment', 'Unknown')}",
+        f"- Leadership concentration: {concentration.get('verdict', 'insufficient data')}",
+        f"- Confirming sleeves: {len(confirming)} of 7 required"
+        + (f" ({', '.join(confirming)})" if confirming else ""),
+        f"- Deteriorating sleeves: {len(deteriorating)} of 7 required"
+        + (f" ({', '.join(deteriorating)})" if deteriorating else ""),
+    ]
+    if summaries is not None and not summaries.empty:
+        required = summaries[summaries["required"]]
+        supporting = summaries[~summaries["required"]]
+        if not required.empty:
+            strongest = required.sort_values("avg_return_3m", ascending=False).iloc[0]
+            weakest = required.sort_values("avg_return_3m", ascending=True).iloc[0]
+            lines.append(
+                f"- Strongest required sleeve: {strongest['sleeve']} "
+                f"({strongest['avg_return_3m']:.1%} avg 3M, {strongest['status']})"
+            )
+            lines.append(
+                f"- Weakest required sleeve: {weakest['sleeve']} "
+                f"({weakest['avg_return_3m']:.1%} avg 3M, {weakest['status']})"
+            )
+        for _, row in supporting.iterrows():
+            lines.append(
+                f"- Supporting sleeve {row['sleeve']}: {row['status']} "
+                f"(excluded from core breadth counts)"
+            )
+    lines.append(
+        f"- Core health-stack breadth: {concentration.get('pct_above_50dma', 0):.0%} above 50DMA, "
+        f"{concentration.get('pct_outperform_xlv', 0):.0%} outperforming XLV "
+        f"(required sleeves only)"
+    )
+    lines.extend(
+        [
+            f"- Unique news events: {event_counts.get('unique_events', 0)} "
+            f"({event_counts.get('material_events', 0)} material, "
+            f"{event_counts.get('multi_source_events', 0)} multi-source)",
+            f"- Main positive evidence: {snapshot.get('main_positive_evidence', 'None identified')}",
+            f"- Main negative evidence: {snapshot.get('main_negative_evidence', 'None identified')}",
+            f"- Main contradiction: {snapshot.get('main_contradiction', 'None identified')}",
+            "",
+        ]
+    )
+    return lines
+
+
 def write_report(snapshot: dict, as_of_stamp: str) -> Path:
     ensure_output_dirs()
     path = REPORTS_DIR / f"glp1_ai_health_stack_watch_{as_of_stamp}.md"
+    confirmation_section = build_confirmation_structure_section(snapshot)
     top_stories = select_key_stories(snapshot["articles"], limit=10)
     news_stats = snapshot["news_stats"]
     market_quality = snapshot.get("market_data_quality", {})
@@ -51,6 +116,7 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         f"- Positive score drivers: {', '.join(snapshot['positive_drivers']) if snapshot['positive_drivers'] else 'None'}",
         f"- Negative score drivers: {', '.join(snapshot['negative_drivers']) if snapshot['negative_drivers'] else 'None'}",
         "",
+        *confirmation_section,
         "## Change Since Prior Run",
         "",
         *prior_delta_lines,
