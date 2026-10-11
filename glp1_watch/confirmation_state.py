@@ -8,6 +8,16 @@ in tests and every classification is explainable in the report.
 States:
     Broadly Confirming, Selectively Confirming, Leader-Dependent, Fragmenting,
     Early Repair, Deteriorating, Failing, Insufficient Evidence
+
+Precedence notes:
+- "Broadly Confirming" additionally requires the leadership-concentration
+  verdict to be "broad", so concentrated single-name strength can never
+  masquerade as broad health (it falls through to Leader-Dependent or
+  Selectively Confirming instead).
+- "Early Repair" is shadowed by "Selectively Confirming": it is reachable
+  only when 2 or fewer sleeves confirm.
+- Only "Low" market-data quality (not "Partial") triggers Insufficient
+  Evidence, alongside core coverage below 50%.
 """
 
 from __future__ import annotations
@@ -47,8 +57,10 @@ def _rule_table() -> list[tuple[str, Callable[[dict], bool], str]]:
             STATE_BROADLY_CONFIRMING,
             lambda c: c["overall_score"] >= 70
             and c["confirming_count"] >= 5
-            and c["breadth_50dma"] >= 0.6,
-            "score >= 70 with 5+ confirming sleeves and strong 50DMA participation",
+            and c["breadth_50dma"] >= 0.6
+            and c["concentration_verdict"] == "broad",
+            "score >= 70 with 5+ confirming sleeves, strong 50DMA participation, "
+            "and broadly distributed gains",
         ),
         (
             STATE_LEADER_DEPENDENT,
@@ -153,11 +165,15 @@ def build_contradiction(leader_assessment: str, stack_assessment: str) -> str:
     """Name the main tension between leader and stack, if any."""
     if leader_assessment == "Unknown" or stack_assessment == "Unknown":
         return "Leader/stack comparison unavailable: insufficient evidence on one side."
+    if leader_assessment == "Confirming" and stack_assessment == "Narrow - dependent on leaders":
+        return (
+            "Leader is confirming and the stack is narrow: strength is concentrated in "
+            "the leader and breadth has not confirmed — fragile if leadership falters."
+        )
     if leader_assessment == "Confirming" and stack_assessment in {
         "Fragmented",
         "Deteriorating",
         "Failing",
-        "Narrow - dependent on leaders",
     }:
         return (
             f"Leader is {leader_assessment.lower()} while the broad stack reads "
