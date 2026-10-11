@@ -161,6 +161,41 @@ def render_confirmation_structure(snapshot: dict) -> None:
         )
         st.caption(f"Main contradiction: {snapshot.get('main_contradiction', 'None identified')}")
     render_opportunity_ranking(snapshot)
+    render_persistence_readiness(snapshot)
+
+
+def render_persistence_readiness(snapshot: dict) -> None:
+    """Phase 3: persistence and decision-readiness display."""
+    table = snapshot.get("persistence_table")
+    if table is None or getattr(table, "empty", True):
+        return
+    with st.expander("Persistence and Decision Readiness", expanded=False):
+        display = table[
+            [
+                "sleeve",
+                "current_score",
+                "four_report_trend",
+                "readiness",
+                "second_derivative",
+            ]
+        ].copy()
+        display.columns = [
+            "Sleeve",
+            "Score",
+            "4-Report Trend",
+            "Readiness",
+            "2nd Derivative",
+        ]
+        st.dataframe(display, width="stretch")
+        for _, row in table.iterrows():
+            conflicts = str(row.get("conflicts") or "").strip()
+            if conflicts:
+                st.caption(f"Conflicting evidence ({row['sleeve']}): {conflicts}")
+        changed = snapshot.get("what_changed_lines") or []
+        if changed:
+            st.write("**What changed since the previous report**")
+            for line in changed:
+                st.write(line)
 
 
 def render_opportunity_ranking(snapshot: dict) -> None:

@@ -203,11 +203,77 @@ def build_opportunity_ranking_section(snapshot: dict) -> list[str]:
     return lines
 
 
+def build_persistence_section(snapshot: dict) -> list[str]:
+    """Phase 3: Persistence and Decision Readiness report section."""
+    table = snapshot.get("persistence_table")
+    lines = ["## Persistence and Decision Readiness", ""]
+    if table is None or getattr(table, "empty", True):
+        lines.extend(["Persistence data unavailable for this run.", ""])
+        return lines
+    lines.extend(
+        [
+            "| Sleeve | Current Score | Four-Report Trend | Persistence | Readiness | Second Derivative |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for _, row in table.iterrows():
+        support = "" if row.get("required") else " (supporting)"
+        persistence = []
+        if pd.notna(row.get("consecutive_improving")) and int(row["consecutive_improving"]) > 0:
+            persistence.append(f"{int(row['consecutive_improving'])} improving")
+        if pd.notna(row.get("consecutive_deteriorating")) and int(row["consecutive_deteriorating"]) > 0:
+            persistence.append(f"{int(row['consecutive_deteriorating'])} deteriorating")
+        if pd.notna(row.get("consecutive_above_strong")) and int(row["consecutive_above_strong"]) > 0:
+            persistence.append(f"{int(row['consecutive_above_strong'])} above strong")
+        if pd.notna(row.get("consecutive_below_weak")) and int(row["consecutive_below_weak"]) > 0:
+            persistence.append(f"{int(row['consecutive_below_weak'])} below weak")
+        persistence_text = ", ".join(persistence) if persistence else "—"
+        lines.append(
+            f"| {row.get('sleeve')}{support} | "
+            f"{_format_score(row.get('current_score'))} | "
+            f"{row.get('four_report_trend', 'insufficient')} | "
+            f"{persistence_text} | "
+            f"{row.get('readiness', 'Insufficient Evidence')} | "
+            f"{row.get('second_derivative', 'insufficient')} |"
+        )
+    lines.append("")
+    for _, row in table.iterrows():
+        conflicts = str(row.get("conflicts") or "").strip()
+        if conflicts:
+            lines.append(f"- Conflicting evidence ({row.get('sleeve')}): {conflicts}.")
+    notes = {
+        str(row.get("readiness_note") or "").strip()
+        for _, row in table.iterrows()
+        if str(row.get("readiness_note") or "").strip()
+    }
+    for note in sorted(notes):
+        lines.append(f"- {note}")
+    lines.extend(
+        [
+            "- Readiness classifies evidence maturity, not portfolio actions.",
+            "- History starts cold: early runs read Insufficient Evidence until streaks form.",
+            "",
+        ]
+    )
+    return lines
+
+
+def build_what_changed_section(snapshot: dict) -> list[str]:
+    """Phase 3: What Changed Since the Previous Report section."""
+    lines = ["## What Changed Since the Previous Report", ""]
+    changed = snapshot.get("what_changed_lines") or []
+    lines.extend(changed if changed else ["- No changes recorded."])
+    lines.append("")
+    return lines
+
+
 def write_report(snapshot: dict, as_of_stamp: str) -> Path:
     ensure_output_dirs()
     path = REPORTS_DIR / f"glp1_ai_health_stack_watch_{as_of_stamp}.md"
     confirmation_section = build_confirmation_structure_section(snapshot)
     opportunity_section = build_opportunity_ranking_section(snapshot)
+    persistence_section = build_persistence_section(snapshot)
+    what_changed_section = build_what_changed_section(snapshot)
     top_stories = select_key_stories(snapshot["articles"], limit=10)
     news_stats = snapshot["news_stats"]
     market_quality = snapshot.get("market_data_quality", {})
@@ -229,6 +295,8 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         "",
         *confirmation_section,
         *opportunity_section,
+        *persistence_section,
+        *what_changed_section,
         "## Change Since Prior Run",
         "",
         *prior_delta_lines,
