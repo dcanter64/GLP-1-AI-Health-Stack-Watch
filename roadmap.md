@@ -142,7 +142,7 @@ This work must be completed in deliberate phases. At the start of each phase, in
 
 ### Phase 1: Improve the Existing Analytical Structure
 
-Status: implemented on branch `muse/phase-1-confirmation-structure` (2026-10-11); pending adversarial review and a live validation run before merge.
+Status: implemented on branch `muse/phase-1-confirmation-structure` (2026-10-11); adversarial review complete with findings fixed; live-validated on Windows 2026-10-11; merge pending operator approval.
 
 Objective: make the current report more decision-ready without issuing allocation tiers or portfolio recommendations.
 
@@ -157,9 +157,9 @@ Delivered:
 
 Phase 1 preserved all existing market data, news, scoring, reporting, validation, and command-line workflows (`TICKER_GROUPS` untouched; XLV/QQQ/SPY remain comparators).
 
-Test state: 76 tests total — 72 passing, including all 38 new Phase 1 tests. Four `test_news.py` failures are pre-existing date-window artifacts (hardcoded 2026-07-08 fixtures aged past the 21-day window; fail on master too).
+Test state: 95 tests total — 91 passing, including all 57 new Phase 1 tests. Four `test_news.py` failures are pre-existing date-window artifacts (hardcoded 2026-07-08 fixtures aged past the 21-day window; fail on master too).
 
-Still required before merge: (1) adversarial review by a separate agent with findings fixed; (2) live `python generate_snapshot.py` run from a normal Windows shell (Yahoo/RSS unreachable from the sandbox/VM) confirming the new section renders on real data.
+Still required before merge: (1) operator approval of the merge; (2) re-run `python generate_snapshot.py` on Windows after the clustering fix to confirm syndicated coverage now merges into multi-source events. Phase 2 remains gated.
 
 Documented Phase 1 limitations: two-name Health Data and Clinical AI sleeve (TEM, CERT); heuristic event clustering.
 
