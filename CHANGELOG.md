@@ -32,6 +32,7 @@
 - `glp1_watch/persistence_engine.py`: Phase 3 persistence engine — CSV history store (`output/history/health_stack_history.csv`) with upsert-on-rerun semantics; per-sleeve persistence metrics (4/8-report trends, improving/deteriorating streaks, above/below-threshold streaks, condition start date, max severity, second derivative); seven-state recommendation-readiness classification with precedence ordering and conflicting-evidence reporting; sleeve-level what-changed diffing.
 - New report sections `Persistence and Decision Readiness` and `What Changed Since the Previous Report`, plus a matching Streamlit expander.
 - 19 new tests in `tests/test_persistence_engine.py` covering all 13 spec'd Phase 3 test items.
+- Review fixes (2026-10-11, same branch): history writes are atomic (temp file + rename — a mid-write crash can no longer silently wipe the store); history is only recorded when outputs are written (dry runs no longer pollute streaks); equal deltas read "steady" instead of "decelerating" in the second derivative; the deterioration fallthrough note no longer claims "no directional signal" when a deterioration streak exists; Exhausted uses direct 50DMA breadth (not the blended market-confirmation score) and accepts flat breadth; future report dates are rejected loudly; the older "Change Since Prior Run" section is renamed "Flywheel Score: Change Since Prior Run" to distinguish it from the new sleeve-level section; `condition_began` now names which streak won via a `condition` field.
 
 ### Planned
 

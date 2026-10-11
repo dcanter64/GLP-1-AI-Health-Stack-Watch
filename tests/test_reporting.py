@@ -111,7 +111,7 @@ class ReportingTests(unittest.TestCase):
                 contents = path.read_text(encoding="utf-8")
                 self.assertTrue(path.exists())
         self.assertIn("# GLP-1 AI Health Stack Watch", contents)
-        self.assertIn("## Change Since Prior Run", contents)
+        self.assertIn("## Flywheel Score: Change Since Prior Run", contents)
         self.assertIn("- Prior snapshot: None available", contents)
         self.assertIn("- Qualified scoring stories: 8", contents)
         self.assertIn("- Market data quality: Partial", contents)

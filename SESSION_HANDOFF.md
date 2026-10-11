@@ -98,7 +98,12 @@ Operator decisions applied (per standing instruction to decide and document):
 
 Phase 3 completion checks:
 
-1. Adversarial review — pending (separate agent).
+1. ~~Adversarial review~~ done 2026-10-11 (separate agent, empirical): 0 critical, 3 major, 8 minor. Fixed on the branch:
+   - M1: atomic history writes (temp + rename).
+   - M2: history only written when outputs are written (dry-run pollution fixed).
+   - M3: second derivative treats sub-noise-floor delta differences as steady.
+   - Minors: deterioration fallthrough note corrected; Exhausted uses direct breadth_50dma with <= 0 gate; future dates rejected; sleeve-rename streak behavior documented; section renamed to "Flywheel Score: Change Since Prior Run"; `condition` field names the winning streak.
+   - Verified correct: all 13 spec test items genuinely covered; all 7 readiness states reachable with spec examples holding; precedence total and correctly ordered; conflicting evidence attached; NaN-safe; Phase 1/2 untouched; no allocation tiers.
 2. Live validation run — pending.
 3. Operator merge approval — pending.
 

@@ -25,6 +25,7 @@ from .persistence_engine import (
     append_history,
     build_persistence_table,
     build_what_changed_lines,
+    load_history,
 )
 from .structural_thesis import compute_structural_thesis
 from .leadership_concentration import (
@@ -491,7 +492,13 @@ def build_dashboard_snapshot(
         material_event_count=int(news_event_counts.get("material_events", 0)),
         flywheel_score=score_snapshot.overall_score,
     )
-    sleeve_history = append_history(HISTORY_DIR, history_rows)
+    # History is only recorded when outputs are written: a dry run must not
+    # pollute streaks with phantom reports. Dry runs still get the
+    # persistence view, computed read-only from existing history.
+    if write_outputs:
+        sleeve_history = append_history(HISTORY_DIR, history_rows)
+    else:
+        sleeve_history = load_history(HISTORY_DIR)
     persistence_table = build_persistence_table(sleeve_history, sleeves)
     what_changed_lines = build_what_changed_lines(sleeve_history)
 
