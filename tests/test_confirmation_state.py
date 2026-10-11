@@ -41,7 +41,12 @@ class ConfirmationStateTests(unittest.TestCase):
         seen = {
             classify_confirmation_state(**base_inputs(market_data_quality="Low"))["state"],
             classify_confirmation_state(
-                **base_inputs(overall_score=75, confirming_count=5, breadth_50dma=0.7)
+                **base_inputs(
+                    overall_score=75,
+                    confirming_count=5,
+                    breadth_50dma=0.7,
+                    concentration_verdict="broad",
+                )
             )["state"],
             classify_confirmation_state(
                 **base_inputs(
@@ -82,9 +87,42 @@ class ConfirmationStateTests(unittest.TestCase):
 
     def test_broadly_confirming(self) -> None:
         result = classify_confirmation_state(
-            **base_inputs(overall_score=75, confirming_count=5, breadth_50dma=0.7)
+            **base_inputs(
+                overall_score=75,
+                confirming_count=5,
+                breadth_50dma=0.7,
+                concentration_verdict="broad",
+            )
         )
         self.assertEqual(result["state"], STATE_BROADLY_CONFIRMING)
+
+    def test_broadly_does_not_mask_leader_dependence(self) -> None:
+        # Strong headline numbers with concentrated gains must not read as
+        # broad health: the concentration signal wins.
+        result = classify_confirmation_state(
+            **base_inputs(
+                overall_score=75,
+                confirming_count=5,
+                deteriorating_count=0,
+                breadth_50dma=0.65,
+                concentration_verdict="leader-dependent",
+                leader_status="confirming",
+            )
+        )
+        self.assertEqual(result["state"], STATE_LEADER_DEPENDENT)
+
+    def test_broadly_requires_broad_concentration(self) -> None:
+        # Same headline numbers with merely selective concentration fall
+        # through to Selectively Confirming, not Broadly Confirming.
+        result = classify_confirmation_state(
+            **base_inputs(
+                overall_score=75,
+                confirming_count=5,
+                breadth_50dma=0.65,
+                concentration_verdict="selective",
+            )
+        )
+        self.assertEqual(result["state"], STATE_SELECTIVELY_CONFIRMING)
 
     def test_leader_dependent_beats_selective(self) -> None:
         # 3 confirming sleeves would be "selectively confirming", but the
@@ -142,6 +180,13 @@ class AssessmentTests(unittest.TestCase):
             self.assertNotEqual(assess_stack(state), "")
         self.assertEqual(assess_stack(STATE_BROADLY_CONFIRMING), "Broadly confirming")
         self.assertEqual(assess_stack(STATE_INSUFFICIENT_EVIDENCE), "Unknown")
+
+    def test_contradiction_leader_dependent_state(self) -> None:
+        # A confirming leader in a leader-dependent stack IS carrying the
+        # stack; the risk is concentration, not absence.
+        text = build_contradiction("Confirming", "Narrow - dependent on leaders")
+        self.assertIn("fragile if leadership falters", text)
+        self.assertNotIn("not carrying the stack", text)
 
     def test_contradiction_leader_vs_stack(self) -> None:
         text = build_contradiction("Confirming", "Fragmented")
