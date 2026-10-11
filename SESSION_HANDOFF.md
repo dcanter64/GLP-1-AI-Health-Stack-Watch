@@ -70,7 +70,11 @@ Operator decisions applied (Codex out of tokens; Muse decided per operator instr
 
 Phase 2 completion checks:
 
-1. Adversarial review — pending (separate agent).
+1. ~~Adversarial review~~ done 2026-10-11 (separate agent, empirical — executed the branch code): 0 critical, 2 major, 11 minor. Fixed on the branch:
+   - M1: all-NaN RS columns skip `rs_breadth` instead of fabricating 0.0 (benchmark-outage guard, same bug class as the Phase 1 classifier fix).
+   - M2: `opportunity_weights` requires the exact four keys; unknown/boolean keys rejected at load (no more KeyError crash on degenerate configs).
+   - Minors: zero-weight-sum → no score (not crash); `interpret_opportunity(NaN)` → "Insufficient data"; recognition-gap thresholds range-checked; `structural_thesis` tolerates missing `tickers` column; trend labels stay in the closed six-label set; opportunity confidence tops out at Medium; catalyst confidence counts signed events only; added strong-stack/weak-leader and high-dispersion tests.
+   - Verified correct: rosters/TICKER_GROUPS byte-identical to master; all score bounds hold; no silent blending; rename preserves history compat; report renders n/a cleanly; spec honesty rules kept.
 2. Live validation run — pending (Windows).
 3. Operator merge approval — pending.
 
