@@ -106,6 +106,23 @@ class ExpectationsRiskTests(unittest.TestCase):
         row = result.loc["AI Drug-Discovery Platforms"]
         self.assertTrue(pd.isna(row["expectations_risk_score"]))
 
+    def test_comma_space_tickers_do_not_crash(self) -> None:
+        # Regression: live data writes "LLY, NVO" (space after comma); the
+        # sleeve lookup must normalize before indexing, not just for the
+        # membership test.
+        performance = pd.DataFrame(
+            [
+                perf_row("LLY", 0.05, 0.10, -0.05),
+                perf_row("NVO", 0.04, 0.09, -0.06),
+            ]
+        )
+        news = articles([("LLY, NVO", 0.8), ("NVO, LLY", 0.7)])
+        result = compute_expectations_risk(
+            performance, pd.DataFrame(), news, make_sleeves(), self.weights
+        ).set_index("sleeve")
+        row = result.loc["Established GLP-1 Leaders"]
+        self.assertFalse(pd.isna(row["expectations_risk_score"]))
+
     def test_score_bounds(self) -> None:
         performance = pd.DataFrame(
             [

@@ -108,11 +108,11 @@ def compute_expectations_risk(
             sentiment = sentiments.loc[idx]
             if pd.isna(sentiment):
                 continue
-            touched = {
-                ticker_to_sleeve[t]
-                for t in str(tickers_col.loc[idx]).split(",")
-                if t.strip().upper() in ticker_to_sleeve
-            }
+            touched = set()
+            for raw in str(tickers_col.loc[idx]).split(","):
+                ticker = raw.strip().upper()
+                if ticker in ticker_to_sleeve:
+                    touched.add(ticker_to_sleeve[ticker])
             for sleeve_name in touched:
                 saturation[sleeve_name]["total"] += 1
                 if sentiment > POSITIVE_SATURATION_SENTIMENT:
