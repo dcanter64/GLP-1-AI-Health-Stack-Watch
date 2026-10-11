@@ -40,26 +40,35 @@ def _usable_returns(frame: pd.DataFrame) -> pd.Series:
 
 
 def _share_true(frame: pd.DataFrame, column: str) -> float:
+    """Share of True values; NaN when the column is missing or has no usable values."""
     if frame.empty or column not in frame.columns:
-        return 0.0
+        return float("nan")
     values = frame[column].dropna()
     if values.empty:
-        return 0.0
+        return float("nan")
     return float(values.astype(bool).mean())
 
 
 def _outperform_share(frame: pd.DataFrame, column: str) -> tuple[float, int]:
-    """Share of names with usable values outperforming (> 0); plus usable count."""
+    """Share of names with usable values outperforming (> 0); plus usable count.
+
+    Returns NaN (not 0.0) when there is nothing usable to measure, so callers
+    cannot mistake missing data for measured weakness.
+    """
     if frame.empty or column not in frame.columns:
-        return 0.0, 0
+        return float("nan"), 0
     values = pd.to_numeric(frame[column], errors="coerce").dropna()
     if values.empty:
-        return 0.0, 0
+        return float("nan"), 0
     return float((values > 0).mean()), int(len(values))
 
 
 def _sleeve_status(coverage: float, outperform_xlv_share: float, avg_return_3m: float) -> str:
     if coverage < MIN_SLEEVE_COVERAGE:
+        return SLEEVE_STATUS_INSUFFICIENT
+    if pd.isna(outperform_xlv_share):
+        # Relative-strength data is structural to confirmation; without it we
+        # report insufficient data rather than a fabricated signal.
         return SLEEVE_STATUS_INSUFFICIENT
     if outperform_xlv_share >= 0.6 and avg_return_3m > 0:
         return SLEEVE_STATUS_CONFIRMING
