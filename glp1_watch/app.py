@@ -129,6 +129,37 @@ def render_executive_summary(snapshot: dict) -> None:
         st.write(", ".join(snapshot["negative_themes"]) if snapshot["negative_themes"] else "No RSS data")
 
     st.plotly_chart(component_score_chart(snapshot["component_scores"]), width="stretch")
+    render_confirmation_structure(snapshot)
+
+
+def render_confirmation_structure(snapshot: dict) -> None:
+    """Phase 1: light display of the confirmation structure (no-op on old snapshots)."""
+    if not snapshot.get("confirmation_state"):
+        return
+    concentration = snapshot.get("leadership_concentration", {}) or {}
+    event_counts = snapshot.get("news_event_counts", {}) or {}
+    with st.expander("Health Stack Confirmation Structure", expanded=False):
+        st.write(f"**Confirmation state:** {snapshot['confirmation_state']}")
+        st.write(
+            f"Leader assessment: {snapshot.get('leader_assessment', 'Unknown')} | "
+            f"Stack assessment: {snapshot.get('stack_assessment', 'Unknown')}"
+        )
+        st.write(f"Leadership concentration: {concentration.get('verdict', 'insufficient data')}")
+        confirming = concentration.get("confirming_sleeves", []) or []
+        deteriorating = concentration.get("deteriorating_sleeves", []) or []
+        st.write(
+            f"Confirming sleeves: {len(confirming)} of 7 required"
+            + (f" ({', '.join(confirming)})" if confirming else "")
+        )
+        st.write(
+            f"Deteriorating sleeves: {len(deteriorating)} of 7 required"
+            + (f" ({', '.join(deteriorating)})" if deteriorating else "")
+        )
+        st.write(
+            f"Unique news events: {event_counts.get('unique_events', 0)} "
+            f"({event_counts.get('material_events', 0)} material)"
+        )
+        st.caption(f"Main contradiction: {snapshot.get('main_contradiction', 'None identified')}")
 
 
 def render_lly_tab(snapshot: dict) -> None:

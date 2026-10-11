@@ -1,0 +1,64 @@
+# Health-stack sleeve definitions for the Phase 1 confirmation structure.
+#
+# Each sleeve lists its member tickers explicitly. Membership is editable here;
+# the analytical structure (which sleeves exist and which are required) is
+# validated in glp1_watch/health_stack_sleeves.py.
+#
+# Rules enforced by the loader (fail loudly, never silently):
+#   - every sleeve needs a name, a non-empty ticker list, and a required flag
+#   - no ticker may appear in more than one sleeve
+#   - every ticker must exist in the market-data universe (TICKER_GROUPS)
+#   - XLV, QQQ, and SPY are comparators and may not be sleeve members
+#   - the set of required sleeves must match the expected seven
+#
+# The eighth sleeve (AI Infrastructure Enablers) is supporting: it is an
+# explicit classifier input and appears in reporting, but core health-stack
+# breadth counts are calculated from the seven required sleeves only, so
+# semiconductor performance cannot make weak healthcare breadth look healthy.
+
+sleeves:
+  - name: "Established GLP-1 Leaders"
+    tickers: ["LLY", "NVO"]
+    required: true
+    description: "Established GLP-1 franchise leaders."
+
+  - name: "Emerging GLP-1 Challengers"
+    tickers: ["AMGN", "VKTX", "ALT", "GPCR", "PFE", "RHHBY"]
+    required: true
+    description: "Challengers with GLP-1/GIP pipeline candidates."
+
+  - name: "Large-Pharma GLP-1 Optionality"
+    tickers: ["MRK", "ABBV", "BMY", "GSK", "SNY", "AZN", "JNJ"]
+    required: true
+    description: "Large pharma names with GLP-1 optionality."
+
+  - name: "AI Drug-Discovery Platforms"
+    tickers: ["RXRX", "SDGR", "ABCL", "DNA"]
+    required: true
+    description: "AI-first drug discovery platforms."
+
+  - name: "Gene Editing and Precision Medicine"
+    tickers: ["CRSP", "NTLA", "BEAM", "EDIT", "REGN", "VRTX"]
+    required: true
+    description: "Gene editing and precision medicine names."
+
+  - name: "Health Data and Clinical AI"
+    tickers: ["TEM", "CERT"]
+    required: true
+    description: >-
+      Health data and clinical AI. Two-name sleeve by operator decision;
+      documented as a Phase 1 limitation (thin sleeve, status swings on
+      single names).
+
+  - name: "Broad Biotech Risk Appetite"
+    tickers: ["XBI", "IBB", "ARKG"]
+    required: true
+    description: "Broad biotech risk appetite via biotech ETFs."
+
+  - name: "AI Infrastructure Enablers"
+    tickers: ["NVDA", "TSM", "AVGO", "SMH", "SOXX"]
+    required: false
+    description: >-
+      Supporting sleeve: AI infrastructure enablers. Explicit classifier input
+      and reported alongside the required sleeves, but excluded from core
+      health-stack breadth counts.

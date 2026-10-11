@@ -5,8 +5,26 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from .config import LOOKBACK_DAYS
+from .confirmation_state import (
+    assess_leader,
+    assess_stack,
+    build_contradiction,
+    classify_confirmation_state,
+)
+from .health_stack_sleeves import (
+    SUPPORTING_SLEEVE_NAME,
+    core_breadth_tickers,
+    load_sleeve_config,
+)
+from .leadership_concentration import (
+    LEADER_SLEEVE_NAME,
+    SLEEVE_STATUS_INSUFFICIENT,
+    build_sleeve_summaries,
+    compute_leadership_concentration,
+)
 from .market_data import MarketSnapshot, load_market_snapshot
 from .news import NewsSnapshot, fetch_news_snapshot
+from .news_event_clustering import cluster_news_events, summarize_event_counts
 from .reporting import (
     append_score_history,
     write_articles_csv,
@@ -303,6 +321,83 @@ def build_dashboard_snapshot(
     market_data_quality = build_market_data_quality(performance)
     news_confidence, news_confidence_note = build_news_confidence(news_snapshot.articles)
     positive_drivers, negative_drivers = summarize_component_drivers(score_snapshot.component_scores)
+
+    # Phase 1: confirmation structure (sleeves, concentration, state, events).
+    sleeves = load_sleeve_config()
+    sleeve_summaries = build_sleeve_summaries(performance, sleeves)
+    concentration = compute_leadership_concentration(performance, sleeve_summaries, sleeves)
+    articles_with_events, news_events = cluster_news_events(news_snapshot.articles)
+    news_event_counts = summarize_event_counts(news_events)
+    qualified_theme_count = (
+        int(qualified_articles["theme"].nunique()) if not qualified_articles.empty else 0
+    )
+    accepted_total = int(news_snapshot.accepted_story_count or 0)
+    if not news_snapshot.accepted_by_ticker.empty and accepted_total:
+        news_top_ticker_share = (
+            float(news_snapshot.accepted_by_ticker["story_count"].max()) / accepted_total
+        )
+        news_top_ticker: str | None = str(news_snapshot.accepted_by_ticker.iloc[0]["ticker"])
+    else:
+        news_top_ticker_share = 0.0
+        news_top_ticker = None
+    leader_tickers = tuple(
+        next(sleeve.tickers for sleeve in sleeves if sleeve.name == LEADER_SLEEVE_NAME)
+    )
+    core_names = core_breadth_tickers(sleeves)
+    if not performance.empty and core_names:
+        core_returns = pd.to_numeric(
+            performance.loc[performance["ticker"].isin(core_names), "return_3m"],
+            errors="coerce",
+        ).dropna()
+        core_coverage = len(core_returns) / len(core_names)
+    else:
+        core_coverage = 0.0
+    def _sleeve_status_lookup(name: str) -> str:
+        if sleeve_summaries.empty or name not in sleeve_summaries["sleeve"].values:
+            return SLEEVE_STATUS_INSUFFICIENT
+        return str(sleeve_summaries.set_index("sleeve").loc[name, "status"])
+
+    leader_status = _sleeve_status_lookup(LEADER_SLEEVE_NAME)
+    supporting_sleeve_status = _sleeve_status_lookup(SUPPORTING_SLEEVE_NAME)
+    confirmation = classify_confirmation_state(
+        overall_score=score_snapshot.overall_score,
+        confirming_count=int(concentration["confirming_count"]),
+        deteriorating_count=int(concentration["deteriorating_count"]),
+        breadth_50dma=float(concentration["pct_above_50dma"]),
+        concentration_verdict=str(concentration["verdict"]),
+        leader_status=leader_status,
+        market_data_quality=str(market_data_quality.get("status", "Unknown")),
+        core_coverage=float(core_coverage),
+        qualified_theme_count=qualified_theme_count,
+        news_top_ticker_share=news_top_ticker_share,
+        news_top_ticker=news_top_ticker,
+        leader_tickers=leader_tickers,
+        supporting_sleeve_status=supporting_sleeve_status,
+    )
+    leader_assessment = assess_leader(leader_status, score_snapshot.lly_ai_trade_score)
+    stack_assessment = assess_stack(confirmation["state"])
+    main_contradiction = build_contradiction(leader_assessment, stack_assessment)
+    strongest_sleeve = concentration.get("strongest_sleeve")
+    weakest_sleeve = concentration.get("weakest_sleeve")
+    sleeve_status_by_name = (
+        dict(zip(sleeve_summaries["sleeve"], sleeve_summaries["status"]))
+        if not sleeve_summaries.empty
+        else {}
+    )
+    strongest_status = sleeve_status_by_name.get(str(strongest_sleeve), "unknown")
+    weakest_status = sleeve_status_by_name.get(str(weakest_sleeve), "unknown")
+    main_positive_evidence = (
+        f"{strongest_sleeve} ({strongest_status}); top drivers: {', '.join(positive_drivers[:2])}"
+        if strongest_sleeve and positive_drivers
+        else (
+            f"{strongest_sleeve} ({strongest_status})" if strongest_sleeve else "None identified"
+        )
+    )
+    main_negative_evidence = (
+        f"{weakest_sleeve} ({weakest_status}); top drags: {', '.join(negative_drivers[:2])}"
+        if weakest_sleeve and negative_drivers
+        else (f"{weakest_sleeve} ({weakest_status})" if weakest_sleeve else "None identified")
+    )
     accepted_story_count = news_snapshot.accepted_story_count
     qualified_story_count = len(qualified_articles)
 
@@ -314,7 +409,22 @@ def build_dashboard_snapshot(
         "layer_performance": market_snapshot.layer_performance,
         "ticker_diagnostics": market_snapshot.ticker_diagnostics,
         "price_history": market_snapshot.price_history,
-        "articles": news_snapshot.articles,
+        "articles": articles_with_events,
+        "sleeve_summaries": sleeve_summaries,
+        "leadership_concentration": concentration,
+        "confirmation_state": confirmation["state"],
+        "confirmation_reason": confirmation["reason"],
+        "leader_assessment": leader_assessment,
+        "stack_assessment": stack_assessment,
+        "main_positive_evidence": main_positive_evidence,
+        "main_negative_evidence": main_negative_evidence,
+        "main_contradiction": main_contradiction,
+        "news_events": news_events,
+        "news_event_counts": news_event_counts,
+        "qualified_theme_count": qualified_theme_count,
+        "news_top_ticker_share": round(news_top_ticker_share, 3),
+        "news_top_ticker": news_top_ticker,
+        "supporting_sleeve_status": supporting_sleeve_status,
         "rejected_articles": news_snapshot.rejected_articles,
         "theme_summary": news_snapshot.theme_summary,
         "sentiment_summary": news_snapshot.sentiment_summary,
