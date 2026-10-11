@@ -142,22 +142,26 @@ This work must be completed in deliberate phases. At the start of each phase, in
 
 ### Phase 1: Improve the Existing Analytical Structure
 
-Status: planned.
+Status: implemented on branch `muse/phase-1-confirmation-structure` (2026-10-11); pending adversarial review and a live validation run before merge.
 
 Objective: make the current report more decision-ready without issuing allocation tiers or portfolio recommendations.
 
-Required additions:
+Delivered:
 
-- Configurable health-stack sleeves.
-- Ticker-to-sleeve mapping.
-- Sleeve-level market confirmation summaries.
-- Overall confirmation-state classification.
-- Leader-concentration analysis.
-- Separate leader assessment and stack assessment.
-- Event-level news clustering with unique event counts and independent source counts.
-- New top-of-report section: `Health Stack Confirmation Structure`.
+- Configurable health-stack sleeves (`config/health_stack_sleeves.yaml`): eight sleeves per the operator-approved rosters; AI Infrastructure Enablers kept as a supporting eighth sleeve (explicit classifier input, reported, excluded from core breadth counts).
+- Loud-validation sleeve loader (`glp1_watch/health_stack_sleeves.py`): unknown tickers, duplicate membership, comparator tickers as members, and wrong required-sleeve set all raise.
+- Sleeve-level market confirmation summaries + leader-concentration analysis (`glp1_watch/leadership_concentration.py`).
+- Precedence-ordered eight-state confirmation classifier + separate leader/stack assessments (`glp1_watch/confirmation_state.py`).
+- Event-level news clustering with unique event counts and independent source counts (`glp1_watch/news_event_clustering.py`; heuristic — directional, not precise).
+- New report section `Health Stack Confirmation Structure` (after Executive Summary) + Streamlit expander.
 
-Phase 1 must preserve all existing market data, news, scoring, reporting, validation, and command-line workflows.
+Phase 1 preserved all existing market data, news, scoring, reporting, validation, and command-line workflows (`TICKER_GROUPS` untouched; XLV/QQQ/SPY remain comparators).
+
+Test state: 76 tests total — 72 passing, including all 38 new Phase 1 tests. Four `test_news.py` failures are pre-existing date-window artifacts (hardcoded 2026-07-08 fixtures aged past the 21-day window; fail on master too).
+
+Still required before merge: (1) adversarial review by a separate agent with findings fixed; (2) live `python generate_snapshot.py` run from a normal Windows shell (Yahoo/RSS unreachable from the sandbox/VM) confirming the new section renders on real data.
+
+Documented Phase 1 limitations: two-name Health Data and Clinical AI sleeve (TEM, CERT); heuristic event clustering.
 
 See `PHASE_1_IMPLEMENTATION_PLAN.md` for the implementation plan.
 
