@@ -9,6 +9,12 @@ is operator-editable there; the analytical structure is validated loudly here:
 - the set of required sleeves must match the expected seven
 
 Any violation raises ``ValueError`` instead of silently degrading the output.
+
+Outage mode (by design): ``load_sleeve_config()`` is a hard dependency of
+``build_dashboard_snapshot``. A missing or invalid YAML file raises out of the
+pipeline and fails the whole run — there is no graceful fallback, because a
+silently wrong sleeve map would be worse than a loud failure. Validate the
+YAML (``python -m pytest tests/test_health_stack_sleeves.py``) after editing.
 """
 
 from __future__ import annotations
@@ -116,9 +122,14 @@ def load_sleeve_config(path: str | Path = CONFIG_PATH) -> list[Sleeve]:
                     f"Sleeve {name!r}: unknown ticker {ticker!r} (not in market-data universe)."
                 )
             if ticker in ticker_owner:
+                owner = ticker_owner[ticker]
+                if owner == name:
+                    raise ValueError(
+                        f"Duplicate ticker membership: {ticker} appears twice in {name!r}."
+                    )
                 raise ValueError(
                     f"Duplicate ticker membership: {ticker} appears in both "
-                    f"{ticker_owner[ticker]!r} and {name!r}."
+                    f"{owner!r} and {name!r}."
                 )
             ticker_owner[ticker] = name
             tickers.append(ticker)
