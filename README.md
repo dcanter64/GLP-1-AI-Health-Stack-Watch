@@ -6,7 +6,7 @@ Streamlit dashboard for tracking the GLP-1, Eli Lilly, AI-biotech, cardiometabol
 
 Version 1 is finished as of 2026-07-19. The Streamlit dashboard pulls yfinance market data, ingests Yahoo Finance RSS stories, classifies news themes, scores the GLP-1 flywheel, and writes audit/report artifacts on each run.
 
-A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phase 1 (analytical structure only; no allocation tiers or portfolio recommendations) is implemented on branch `muse/phase-1-confirmation-structure` and pending adversarial review plus a live validation run before merge.
+A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phase 1 (analytical structure only; no allocation tiers or portfolio recommendations) is implemented on branch `muse/phase-1-confirmation-structure`; adversarial review is complete with findings fixed and live Windows validation passed — merge pending.
 
 The news engine now uses ticker headline feeds, a keyword prefilter, source derivation, a 21-day story window, and a stricter healthcare relevance gate before story classification, sentiment, ticker tagging, and scoring. The scoring path also uses a smaller qualified-story subset so one noisy feed cannot overwhelm the flywheel score.
 
@@ -56,12 +56,12 @@ Phase 1 adds a `Health Stack Confirmation Structure` section to the report and d
 - Leadership-concentration analysis with a broad/selective/leader-dependent verdict. Core breadth counts use the seven required sleeves only, so semiconductor performance cannot make weak healthcare breadth look healthy.
 - A precedence-ordered eight-state confirmation classifier: Broadly Confirming, Selectively Confirming, Leader-Dependent, Fragmenting, Early Repair, Deteriorating, Failing, Insufficient Evidence.
 - Separate leader and stack assessments plus a named leader-vs-stack contradiction.
-- Heuristic news-event clustering (theme + title-token key) with unique-event, independent-source, and material-event counts.
+- Fuzzy news-event clustering (theme + ticker overlap + title similarity + 72h window) with unique-event, independent-source, and material-event counts.
 
 Phase 1 limitations (documented, not fixed):
 
 - The Health Data and Clinical AI sleeve has only two names (TEM, CERT); its status swings on single names.
-- Event clustering is heuristic: near-identical headlines can merge distinct events, and very differently worded headlines can split one event. Counts are directional, not precise.
+- Event clustering is heuristic (Jaccard >= 0.3 on significant title tokens, 72h window): very differently worded headlines can still split one event, and near-identical headlines on different tickers stay separate by design. Counts are directional, not precise.
 
 Planning documents:
 
