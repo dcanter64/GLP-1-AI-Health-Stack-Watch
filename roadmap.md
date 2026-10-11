@@ -198,7 +198,7 @@ Documented Phase 3 limitations: history starts cold (no backfill of pre-Phase-3 
 
 ### Phase 4: Add the Capital Allocation Decision Layer
 
-Status: in progress — implemented on branch `muse/phase-4-decision-layer`, awaiting adversarial review and merge approval. (Operator greenlit all 8 design recommendations 2026-10-11.)
+Status: merged to master 2026-10-11 as `09057b4` (operator-approved merge; byte-identical verified).
 
 Planned additions:
 
@@ -211,7 +211,7 @@ Planned additions:
 
 ### Phase 5: Add Position-Level Decisions and Accountability
 
-Status: gated; do not begin until Phase 4 is reviewed and approved.
+Status: in progress — implemented on branch `muse/phase-5-positions-accountability`. Operator approved all 7 design decisions 2026-10-11 (precedence-ordered 13-status classifier + explicit Not Rated outcome; sleeve tier −1 rule with floor 0 and no price-action upgrades; two-track backtesting with honesty guardrails; absolute + relative FP/FN definitions; single sleeve+ticker journal file with immutable decision fields; automatic forward-fill at maturity; §§9–10 report placement) plus guardrails (analytical only; ticker calls cannot override broad-stack exposure; insufficient history ≠ poor performance; min-n gating; dry-run purity).
 
 Planned additions:
 
