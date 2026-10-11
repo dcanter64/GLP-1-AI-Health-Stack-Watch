@@ -1,0 +1,178 @@
+"""Phase 5: decision journal tests — immutability and honest forward fills."""
+
+import tempfile
+import unittest
+from datetime import datetime, timezone
+
+import pandas as pd
+
+from glp1_watch import decision_journal as dj
+
+
+def entry(entity_type="ticker", name="AAA", **overrides):
+    row = {
+        "entity_type": entity_type,
+        "entity_name": name,
+        "methodology_version": "phase5-v1",
+        "decision_price": 100.0,
+        "decision_price_date": "2026-01-02",
+        "recommendation": "INCREASE",
+        "recommended_tier": 3,
+        "confidence": 70.0,
+        "urgency": "Moderate",
+        "evidence": "test",
+        "upgrade_condition": "up",
+        "downgrade_condition": "down",
+        "invalidation_condition": "invalid",
+    }
+    row.update(overrides)
+    return row
+
+
+def price_history(prices, start="2026-01-02"):
+    idx = pd.date_range(start=start, periods=len(prices), freq="D")
+    return pd.DataFrame({"AAA": prices}, index=idx)
+
+
+def as_of(date_str):
+    return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+
+class JournalStoreTests(unittest.TestCase):
+    def test_append_and_upsert(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first = dj.append_journal_entries(tmp, [entry()], as_of("2026-10-11"))
+            self.assertEqual(len(first), 1)
+            # Same key re-inserted: upsert, not duplicate.
+            second = dj.append_journal_entries(tmp, [entry()], as_of("2026-10-11"))
+            self.assertEqual(len(second), 1)
+
+    def test_decision_fields_immutable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dj.append_journal_entries(tmp, [entry(recommendation="INCREASE")], as_of("2026-10-11"))
+            # A later run tries to change the recommendation for the same key.
+            journal = dj.append_journal_entries(
+                tmp, [entry(recommendation="REDUCE")], as_of("2026-10-11")
+            )
+            self.assertEqual(len(journal), 1)
+            self.assertEqual(journal.iloc[0]["recommendation"], "INCREASE")
+
+    def test_unique_key_includes_entity_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = dj.append_journal_entries(
+                tmp,
+                [entry("sleeve", "Some Sleeve"), entry("ticker", "Some Sleeve")],
+                as_of("2026-10-11"),
+            )
+            self.assertEqual(len(journal), 2)
+
+    def test_future_dates_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "future decision date"):
+                dj.append_journal_entries(tmp, [entry()], as_of("2099-01-01"))
+
+    def test_atomic_write_no_leftovers(self):
+        import pathlib
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dj.append_journal_entries(tmp, [entry()], as_of("2026-10-11"))
+            leftovers = list(pathlib.Path(tmp).glob("*.tmp"))
+            self.assertEqual(leftovers, [])
+
+
+class ForwardFillTests(unittest.TestCase):
+    def test_fills_at_maturity_with_first_close(self):
+        # Decision 2026-01-02; 1M matures 2026-02-01. First close on/after.
+        journal = pd.DataFrame(
+            [{**entry(), "decision_date": "2026-01-02", **{c: pd.NA for c in dj.OUTCOME_FIELDS}}],
+            columns=dj.JOURNAL_COLUMNS,
+        )
+        prices = [100.0] * 30 + [110.0] * 40  # jump after day 30
+        filled = dj.fill_forward_outcomes(journal, price_history(prices))
+        # maturity 2026-02-01 -> first close on/after is index 30 (Feb 1) = 110.0
+        self.assertAlmostEqual(filled.iloc[0]["outcome_1m"], 0.10)
+        self.assertEqual(filled.iloc[0]["outcome_1m_date"], "2026-02-01")
+        # 3M (Apr 3) not yet matured in a 70-day series -> stays NULL.
+        self.assertTrue(pd.isna(filled.iloc[0]["outcome_3m"]))
+
+    def test_never_fills_before_maturity(self):
+        journal = pd.DataFrame(
+            [{**entry(), "decision_date": "2026-01-02", **{c: pd.NA for c in dj.OUTCOME_FIELDS}}],
+            columns=dj.JOURNAL_COLUMNS,
+        )
+        prices = [100.0 + i for i in range(40)]  # only 40 days
+        filled = dj.fill_forward_outcomes(journal, price_history(prices))
+        self.assertTrue(pd.isna(filled.iloc[0]["outcome_3m"]))
+        self.assertTrue(pd.isna(filled.iloc[0]["outcome_6m"]))
+
+    def test_outcomes_immutable_once_recorded(self):
+        journal = pd.DataFrame(
+            [
+                {
+                    **entry(),
+                    "decision_date": "2026-01-02",
+                    "outcome_1m": 0.05,
+                    "outcome_1m_date": "2026-02-01",
+                    **{c: pd.NA for c in ["outcome_3m", "outcome_3m_date", "outcome_6m", "outcome_6m_date"]},
+                }
+            ],
+            columns=dj.JOURNAL_COLUMNS,
+        )
+        prices = [100.0] * 30 + [999.0] * 40  # would change the outcome if recomputed
+        filled = dj.fill_forward_outcomes(journal, price_history(prices))
+        self.assertAlmostEqual(filled.iloc[0]["outcome_1m"], 0.05)
+
+    def test_sleeve_outcome_is_equal_weight(self):
+        journal = pd.DataFrame(
+            [
+                {
+                    **entry("sleeve", "S", decision_price=None, decision_price_date=None),
+                    "decision_date": "2026-01-02",
+                    **{c: pd.NA for c in dj.OUTCOME_FIELDS},
+                }
+            ],
+            columns=dj.JOURNAL_COLUMNS,
+        )
+        idx = pd.date_range(start="2026-01-02", periods=35, freq="D")
+        prices = pd.DataFrame({"A": [100.0] * 35, "B": [100.0] * 30 + [120.0] * 5}, index=idx)
+        filled = dj.fill_forward_outcomes(
+            journal, prices, sleeve_members={"S": ["A", "B"]}
+        )
+        # A: 0%, B: +20% over the first 31 days -> eq-wt +10%.
+        self.assertAlmostEqual(filled.iloc[0]["outcome_1m"], 0.10)
+
+    def test_decision_price_uses_last_close_on_or_before(self):
+        # Decision on a Sunday: price off Friday's close, never a future close.
+        idx = pd.date_range(start="2026-10-05", periods=5, freq="D")  # Mon-Fri
+        prices = pd.DataFrame({"AAA": [100.0, 101.0, 102.0, 103.0, 104.0]}, index=idx)
+        card = {
+            "ticker": "AAA", "recommendation": "HOLD", "tier": None,
+            "confidence": 0.0, "urgency": "Low", "reason": "not rated",
+            "upgrade_condition": "", "downgrade_condition": "",
+            "invalidation_condition": "",
+        }
+        entries = dj.build_journal_entries(
+            decision_cards=[],
+            position_cards=[card],
+            price_history=prices,
+            methodology_version="phase5-v1",
+            as_of_dt=as_of("2026-10-11"),  # Sunday
+        )
+        self.assertEqual(len(entries), 1)
+        self.assertAlmostEqual(entries[0]["decision_price"], 104.0)
+        self.assertEqual(entries[0]["decision_price_date"], "2026-10-09")
+
+    def test_repair_recomputes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dj.append_journal_entries(tmp, [entry()], as_of("2026-01-02"))
+            journal = dj.load_journal(tmp)
+            prices = price_history([100.0] * 30 + [110.0] * 40)
+            repaired = dj.repair_outcomes(tmp, journal, prices)
+            self.assertAlmostEqual(repaired.iloc[0]["outcome_1m"], 0.10)
+            # Repair persisted.
+            reloaded = dj.load_journal(tmp)
+            self.assertAlmostEqual(reloaded.iloc[0]["outcome_1m"], 0.10)
+
+
+if __name__ == "__main__":
+    unittest.main()
