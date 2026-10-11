@@ -75,7 +75,7 @@ Phase 2 completion checks:
    - M2: `opportunity_weights` requires the exact four keys; unknown/boolean keys rejected at load (no more KeyError crash on degenerate configs).
    - Minors: zero-weight-sum → no score (not crash); `interpret_opportunity(NaN)` → "Insufficient data"; recognition-gap thresholds range-checked; `structural_thesis` tolerates missing `tickers` column; trend labels stay in the closed six-label set; opportunity confidence tops out at Medium; catalyst confidence counts signed events only; added strong-stack/weak-leader and high-dispersion tests.
    - Verified correct: rosters/TICKER_GROUPS byte-identical to master; all score bounds hold; no silent blending; rename preserves history compat; report renders n/a cleanly; spec honesty rules kept.
-2. Live validation run — pending (Windows).
+2. ~~Live validation run~~ done 2026-10-11 (Linux, real market + news data): `generate_snapshot.py` completed (stance Neutral, flywheel 42.8); Opportunity Ranking rendered all eight sleeves plausibly (Health Data and Clinical AI 59.3 first; Gene Editing 38.9 last; no recognition gaps). Caught and fixed one live-only bug: ticker `KeyError` on comma-space lists in `expectations_risk.py` (+ regression test). A confirmatory run on the operator's Windows machine is still welcome but no longer blocking.
 3. Operator merge approval — pending.
 
 ## Phase Gate
