@@ -129,11 +129,13 @@ def append_history(
         else existing
     )
     if not combined.empty:
-        combined = combined.drop_duplicates(subset=["as_of_date", "sleeve"], keep="last")
+        # Normalize dates before dedup: existing rows carry datetimes while
+        # incoming rows carry strings, and mixed types never compare equal.
         combined["as_of_date"] = pd.to_datetime(
             combined["as_of_date"], format="%Y-%m-%d", errors="coerce"
         )
         combined = combined.dropna(subset=["as_of_date"])
+        combined = combined.drop_duplicates(subset=["as_of_date", "sleeve"], keep="last")
         combined = combined.sort_values(["sleeve", "as_of_date"]).reset_index(drop=True)
         combined["as_of_date"] = combined["as_of_date"].dt.strftime("%Y-%m-%d")
     # Atomic write: a crash mid-write must never leave a truncated history.
