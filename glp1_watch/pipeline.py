@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from .config import LOOKBACK_DAYS
+from .config import HISTORY_DIR, LOOKBACK_DAYS
 from .catalyst_score import compute_catalyst_score
 from .confirmation_state import (
     assess_leader,
@@ -21,6 +21,11 @@ from .health_stack_sleeves import (
 )
 from .market_confirmation import compute_market_confirmation
 from .opportunity import compute_opportunity_scores
+from .persistence_engine import (
+    append_history,
+    build_persistence_table,
+    build_what_changed_lines,
+)
 from .structural_thesis import compute_structural_thesis
 from .leadership_concentration import (
     LEADER_SLEEVE_NAME,
@@ -233,6 +238,45 @@ def summarize_ticker_counts(accepted_by_ticker: pd.DataFrame) -> str:
     return ", ".join(f"{row.ticker} ({int(row.story_count)})" for row in top_rows.itertuples())
 
 
+def _build_history_rows(
+    as_of_dt,
+    opportunity_ranking: pd.DataFrame,
+    confirmation_state: str,
+    concentration: dict,
+    market_data_quality: dict,
+    news_confidence: str,
+    material_event_count: int,
+    flywheel_score: float,
+) -> list[dict[str, object]]:
+    """One history row per sleeve for the Phase 3 history store."""
+    rows: list[dict[str, object]] = []
+    date_str = as_of_dt.strftime("%Y-%m-%d")
+    ranking = opportunity_ranking if opportunity_ranking is not None else pd.DataFrame()
+    for _, row in ranking.iterrows():
+        rows.append(
+            {
+                "as_of_date": date_str,
+                "sleeve": row.get("sleeve"),
+                "required": bool(row.get("required")),
+                "opportunity_score": row.get("opportunity_score"),
+                "structural_score": row.get("structural_score"),
+                "market_confirmation_score": row.get("market_confirmation_score"),
+                "catalyst_score": row.get("catalyst_score"),
+                "expectations_risk_score": row.get("expectations_risk_score"),
+                "trend": row.get("trend"),
+                "confirmation_state": confirmation_state,
+                "breadth_50dma": concentration.get("pct_above_50dma"),
+                "breadth_outperform_xlv": concentration.get("pct_outperform_xlv"),
+                "concentration_verdict": concentration.get("verdict"),
+                "market_data_quality": market_data_quality.get("status"),
+                "news_confidence": news_confidence,
+                "material_event_count": material_event_count,
+                "flywheel_score": flywheel_score,
+            }
+        )
+    return rows
+
+
 def build_dashboard_snapshot(
     write_outputs: bool = True,
     lookback_days: int = LOOKBACK_DAYS,
@@ -436,6 +480,21 @@ def build_dashboard_snapshot(
         decision_weights,
     )
 
+    # Phase 3: persist per-sleeve scores and compute persistence/readiness.
+    history_rows = _build_history_rows(
+        as_of_dt=as_of_dt,
+        opportunity_ranking=opportunity_ranking,
+        confirmation_state=confirmation["state"],
+        concentration=concentration,
+        market_data_quality=market_data_quality,
+        news_confidence=news_confidence,
+        material_event_count=int(news_event_counts.get("material_events", 0)),
+        flywheel_score=score_snapshot.overall_score,
+    )
+    sleeve_history = append_history(HISTORY_DIR, history_rows)
+    persistence_table = build_persistence_table(sleeve_history, sleeves)
+    what_changed_lines = build_what_changed_lines(sleeve_history)
+
     snapshot = {
         "as_of_date": as_of_dt.strftime("%Y-%m-%d %H:%M UTC"),
         "lookback_days": lookback_days,
@@ -461,6 +520,8 @@ def build_dashboard_snapshot(
         "catalyst_scores": catalyst_df,
         "expectations_risk": expectations_df,
         "opportunity_ranking": opportunity_ranking,
+        "persistence_table": persistence_table,
+        "what_changed_lines": what_changed_lines,
         "qualified_theme_count": qualified_theme_count,
         "news_top_ticker_share": round(news_top_ticker_share, 3),
         "news_top_ticker": news_top_ticker,
