@@ -12,6 +12,7 @@ Any violation raises ``ValueError`` instead of silently mis-scoring.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,40 @@ REQUIRED_WEIGHT_GROUPS = (
     "market_confirmation_weights",
     "expectations_risk_weights",
 )
+
+#: Exact expected key sets. The scorers look up these keys directly, so a
+#: config that sums to 1.0 with the wrong keys would crash the blender
+#: instead of mis-scoring quietly. Unknown keys are rejected loudly.
+EXPECTED_WEIGHT_KEYS = {
+    "opportunity_weights": frozenset(
+        {
+            "market_confirmation",
+            "structural_thesis",
+            "catalyst",
+            "expectations_risk",
+        }
+    ),
+    "market_confirmation_weights": frozenset(
+        {
+            "absolute_3m",
+            "rs_breadth",
+            "trend_position",
+            "drawdown",
+            "momentum_pace",
+            "volatility",
+            "concentration",
+        }
+    ),
+    "expectations_risk_weights": frozenset(
+        {
+            "acceleration",
+            "extension",
+            "no_drawdown",
+            "narrow_leadership",
+            "news_saturation",
+        }
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -45,8 +80,27 @@ class DecisionWeights:
 def _validate_weights(name: str, weights: object) -> dict[str, float]:
     if not isinstance(weights, dict) or not weights:
         raise ValueError(f"decision_weights: {name!r} must be a non-empty mapping.")
+    expected = EXPECTED_WEIGHT_KEYS[name]
+    actual = {str(key) for key in weights}
+    unknown = actual - expected
+    if unknown:
+        raise ValueError(
+            f"decision_weights: {name!r} has unknown keys {sorted(unknown)}; "
+            f"expected subset of {sorted(expected)}."
+        )
+    if name == "opportunity_weights" and actual != expected:
+        # The opportunity blender looks these keys up directly: a missing key
+        # would crash with KeyError instead of mis-scoring loudly.
+        raise ValueError(
+            f"decision_weights: {name!r} must define all of {sorted(expected)}; "
+            f"missing {sorted(expected - actual)}."
+        )
     cleaned: dict[str, float] = {}
     for key, value in weights.items():
+        if isinstance(value, bool):
+            raise ValueError(
+                f"decision_weights: {name!r}[{key!r}] is a boolean, not a number."
+            )
         try:
             number = float(value)  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -112,12 +166,19 @@ def load_decision_weights(path: str | Path = CONFIG_PATH) -> DecisionWeights:
             raise ValueError(f"decision_weights: {key!r} must be positive.")
         return number
 
-    def _threshold(key: str) -> float:
+    def _threshold(key: str, low: float = 0.0, high: float = 100.0) -> float:
         value = data.get(key)
+        if isinstance(value, bool):
+            raise ValueError(f"decision_weights: {key!r} is a boolean, not a number.")
         try:
-            return float(value)  # type: ignore[arg-type]
+            number = float(value)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             raise ValueError(f"decision_weights: {key!r} must be a number.")
+        if not low <= number <= high:
+            raise ValueError(
+                f"decision_weights: {key!r} must be within [{low}, {high}]."
+            )
+        return number
 
     trend_strong = _threshold("trend_strong_threshold")
     trend_weak = _threshold("trend_weak_threshold")
@@ -143,6 +204,8 @@ def load_decision_weights(path: str | Path = CONFIG_PATH) -> DecisionWeights:
 
 def interpret_opportunity(score: float, weights: DecisionWeights) -> str:
     """Map an opportunity score to its interpretation band label."""
+    if score is None or (isinstance(score, float) and math.isnan(score)):
+        return "Insufficient data"
     for threshold, label in weights.interpretation_bands:
         if score >= threshold:
             return label

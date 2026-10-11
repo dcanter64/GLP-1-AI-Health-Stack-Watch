@@ -86,6 +86,44 @@ class MarketConfirmationTests(unittest.TestCase):
         self.assertTrue(pd.isna(row["market_confirmation_score"]))
         self.assertEqual(row["confidence"], "Low")
 
+    def test_all_nan_rs_skips_component_instead_of_fabricating_zero(self) -> None:
+        # Regression: NaN RS columns previously compared as False -> 0.0 share,
+        # fabricating deterioration during a benchmark outage.
+        performance = pd.DataFrame(
+            [
+                {
+                    "ticker": "LLY",
+                    "return_1m": 0.08,
+                    "return_3m": 0.25,
+                    "rs_vs_xlv": float("nan"),
+                    "rs_vs_spy": float("nan"),
+                    "rs_vs_qqq": float("nan"),
+                    "above_50dma": True,
+                    "above_200dma": True,
+                    "distance_from_52w_high": -0.02,
+                },
+                {
+                    "ticker": "NVO",
+                    "return_1m": 0.07,
+                    "return_3m": 0.22,
+                    "rs_vs_xlv": float("nan"),
+                    "rs_vs_spy": float("nan"),
+                    "rs_vs_qqq": float("nan"),
+                    "above_50dma": True,
+                    "above_200dma": True,
+                    "distance_from_52w_high": -0.03,
+                },
+            ]
+        )
+        result = compute_market_confirmation(
+            performance, pd.DataFrame(), make_sleeves(), self.weights
+        ).set_index("sleeve")
+        row = result.loc["Established GLP-1 Leaders"]
+        self.assertNotIn("rs_breadth", row["components"])
+        self.assertIn("rs_breadth", row["note"])
+        # Strong returns must still score well without the RS component.
+        self.assertGreater(row["market_confirmation_score"], 60)
+
     def test_score_bounds(self) -> None:
         performance = pd.DataFrame(
             [

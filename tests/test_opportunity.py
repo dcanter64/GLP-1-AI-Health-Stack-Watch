@@ -221,3 +221,104 @@ class OpportunityTests(unittest.TestCase):
         leaders = result.loc["Established GLP-1 Leaders", "opportunity_score"]
         platforms = result.loc["AI Drug-Discovery Platforms", "opportunity_score"]
         self.assertGreater(leaders - platforms, 30)
+
+    def test_strong_stack_weak_leader_scenario(self) -> None:
+        # Mirror image: the stack sleeve is strong while the leader sleeve is
+        # weak. The ranking must reflect each sleeve's own evidence.
+        market = frame(
+            [
+                {
+                    **component("Established GLP-1 Leaders", 0),
+                    "market_confirmation_score": 25.0,
+                    "avg_return_1m": -0.06,
+                    "avg_return_3m": -0.12,
+                },
+                {
+                    **component("AI Drug-Discovery Platforms", 0),
+                    "market_confirmation_score": 75.0,
+                    "avg_return_1m": 0.07,
+                    "avg_return_3m": 0.18,
+                },
+            ]
+        )
+        structural = frame(
+            [
+                {**component("Established GLP-1 Leaders", 0), "structural_score": 35.0},
+                {**component("AI Drug-Discovery Platforms", 0), "structural_score": 72.0},
+            ]
+        )
+        catalyst = frame(
+            [
+                {**component("Established GLP-1 Leaders", 0), "catalyst_score": 15.0},
+                {**component("AI Drug-Discovery Platforms", 0), "catalyst_score": 55.0},
+            ]
+        )
+        risk = frame(
+            [
+                {**component("Established GLP-1 Leaders", 0), "expectations_risk_score": 55.0},
+                {**component("AI Drug-Discovery Platforms", 0), "expectations_risk_score": 35.0},
+            ]
+        )
+        result = compute_opportunity_scores(
+            market, structural, catalyst, risk, summaries(), make_sleeves(), self.weights
+        ).set_index("sleeve")
+        leaders = result.loc["Established GLP-1 Leaders", "opportunity_score"]
+        platforms = result.loc["AI Drug-Discovery Platforms", "opportunity_score"]
+        self.assertGreater(platforms - leaders, 25)
+        self.assertEqual(result.index[0], "AI Drug-Discovery Platforms")
+
+    def test_high_dispersion_lowers_market_confirmation(self) -> None:
+        # Behavioral dispersion test: identical average returns, but one
+        # sleeve's gains are concentrated in a single name.
+        from glp1_watch.market_confirmation import compute_market_confirmation
+
+        def row(ticker: str, r3m: float) -> dict:
+            return {
+                "ticker": ticker,
+                "return_1m": r3m / 3,
+                "return_3m": r3m,
+                "rs_vs_xlv": 0.02,
+                "rs_vs_spy": 0.02,
+                "rs_vs_qqq": 0.02,
+                "above_50dma": True,
+                "above_200dma": True,
+                "distance_from_52w_high": -0.05,
+            }
+
+        performance = pd.DataFrame(
+            [
+                row("LLY", 0.10),
+                row("NVO", 0.10),  # broad: gains split evenly
+                row("RXRX", 0.20),
+                row("SDGR", 0.00),  # concentrated: one name holds all gains
+            ]
+        )
+        result = compute_market_confirmation(
+            performance, pd.DataFrame(), make_sleeves(), self.weights
+        ).set_index("sleeve")
+        broad = result.loc["Established GLP-1 Leaders", "components"]["concentration"]
+        concentrated = result.loc["AI Drug-Discovery Platforms", "components"]["concentration"]
+        self.assertGreater(broad, concentrated)
+
+    def test_trend_unknown_without_pace_data(self) -> None:
+        market = frame(
+            [
+                {
+                    **component("Established GLP-1 Leaders", 0),
+                    "market_confirmation_score": 80.0,
+                    "avg_return_1m": float("nan"),
+                    "avg_return_3m": float("nan"),
+                },
+            ]
+        )
+        result = compute_opportunity_scores(
+            market,
+            self.structural,
+            self.catalyst,
+            self.risk,
+            summaries(),
+            make_sleeves(),
+            self.weights,
+        ).set_index("sleeve")
+        # Closed label set: Unknown, never a seventh ad-hoc string.
+        self.assertEqual(result.loc["Established GLP-1 Leaders", "trend"], "Unknown")

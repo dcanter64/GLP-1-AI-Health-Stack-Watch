@@ -104,7 +104,11 @@ def compute_structural_thesis(
             else pd.Series([float("nan")] * len(frame), index=frame.index)
         )
         themes = frame["theme"].astype(str) if "theme" in frame.columns else ""
-        tickers = frame["tickers"] if "tickers" in frame.columns else ""
+        tickers = (
+            frame["tickers"]
+            if "tickers" in frame.columns
+            else pd.Series([""] * len(frame), index=frame.index)
+        )
         for idx in frame.index:
             sentiment = sentiments.loc[idx]
             if pd.isna(sentiment):

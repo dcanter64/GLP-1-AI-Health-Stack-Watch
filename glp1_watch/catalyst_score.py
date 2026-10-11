@@ -112,7 +112,11 @@ def compute_catalyst_score(
                 continue
             sign = _event_sign(float(sentiments.get(event_id, float("nan"))))
             for sleeve_name in touched:
-                event_counts[sleeve_name] += 1
+                # Confidence counts signed evidence only: an event with no
+                # articles (or neutral sentiment) moves no category and must
+                # not inflate confidence.
+                if sign != 0:
+                    event_counts[sleeve_name] += 1
                 for category in categories:
                     net[sleeve_name][category] += sign
 
