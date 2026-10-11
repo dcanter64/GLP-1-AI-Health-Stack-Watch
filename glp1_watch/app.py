@@ -88,7 +88,7 @@ def render_executive_summary(snapshot: dict) -> None:
     news_stats = snapshot["news_stats"]
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Stance", snapshot["stance"])
-    col2.metric("Flywheel Score", f"{snapshot['overall_score']:.1f}/100")
+    col2.metric("Health Stack Flywheel", f"{snapshot['overall_score']:.1f}/100")
     col3.metric("LLY AI Trade", f"{snapshot['lly_ai_trade_score']:.1f}/100")
     col4.metric("Market Data", str(market_quality.get("status", "Unknown")))
 
@@ -160,6 +160,45 @@ def render_confirmation_structure(snapshot: dict) -> None:
             f"({event_counts.get('material_events', 0)} material)"
         )
         st.caption(f"Main contradiction: {snapshot.get('main_contradiction', 'None identified')}")
+    render_opportunity_ranking(snapshot)
+
+
+def render_opportunity_ranking(snapshot: dict) -> None:
+    """Phase 2: sleeve opportunity ranking display."""
+    ranking = snapshot.get("opportunity_ranking")
+    if ranking is None or getattr(ranking, "empty", True):
+        return
+    with st.expander("Health Stack Opportunity Ranking", expanded=False):
+        display = ranking[
+            [
+                "rank",
+                "sleeve",
+                "opportunity_score",
+                "structural_score",
+                "market_confirmation_score",
+                "catalyst_score",
+                "expectations_risk_score",
+                "trend",
+            ]
+        ].copy()
+        display.columns = [
+            "Rank",
+            "Sleeve",
+            "Opportunity",
+            "Structural",
+            "Market Conf.",
+            "Catalyst",
+            "Exp. Risk",
+            "Trend",
+        ]
+        st.dataframe(display, width="stretch")
+        gaps = ranking[ranking["recognition_gap"] == True]  # noqa: E712
+        for _, row in gaps.iterrows():
+            st.caption(f"Recognition gap: {row['sleeve']} — strong thesis/catalysts, weak market confirmation.")
+        st.caption(
+            "Analytical only — no allocation tiers. Structural score is a news-evidence proxy; "
+            "expectations risk has reduced confidence (no valuation data)."
+        )
 
 
 def render_lly_tab(snapshot: dict) -> None:

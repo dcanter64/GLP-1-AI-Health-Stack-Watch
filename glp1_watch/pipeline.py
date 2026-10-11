@@ -5,17 +5,23 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from .config import LOOKBACK_DAYS
+from .catalyst_score import compute_catalyst_score
 from .confirmation_state import (
     assess_leader,
     assess_stack,
     build_contradiction,
     classify_confirmation_state,
 )
+from .decision_weights import load_decision_weights
+from .expectations_risk import compute_expectations_risk
 from .health_stack_sleeves import (
     SUPPORTING_SLEEVE_NAME,
     core_breadth_tickers,
     load_sleeve_config,
 )
+from .market_confirmation import compute_market_confirmation
+from .opportunity import compute_opportunity_scores
+from .structural_thesis import compute_structural_thesis
 from .leadership_concentration import (
     LEADER_SLEEVE_NAME,
     SLEEVE_STATUS_INSUFFICIENT,
@@ -401,6 +407,35 @@ def build_dashboard_snapshot(
     accepted_story_count = news_snapshot.accepted_story_count
     qualified_story_count = len(qualified_articles)
 
+    # Phase 2: sleeve-level opportunity scoring.
+    decision_weights = load_decision_weights()
+    structural_df = compute_structural_thesis(qualified_articles, sleeves)
+    market_confirmation_df = compute_market_confirmation(
+        performance, market_snapshot.price_history, sleeves, decision_weights
+    )
+    catalyst_df = compute_catalyst_score(
+        news_events,
+        articles_with_events,
+        sleeves,
+        decision_weights.catalyst_saturation_per_category,
+    )
+    expectations_df = compute_expectations_risk(
+        performance,
+        market_snapshot.price_history,
+        qualified_articles,
+        sleeves,
+        decision_weights,
+    )
+    opportunity_ranking = compute_opportunity_scores(
+        market_confirmation_df,
+        structural_df,
+        catalyst_df,
+        expectations_df,
+        sleeve_summaries,
+        sleeves,
+        decision_weights,
+    )
+
     snapshot = {
         "as_of_date": as_of_dt.strftime("%Y-%m-%d %H:%M UTC"),
         "lookback_days": lookback_days,
@@ -421,6 +456,11 @@ def build_dashboard_snapshot(
         "main_contradiction": main_contradiction,
         "news_events": news_events,
         "news_event_counts": news_event_counts,
+        "structural_thesis": structural_df,
+        "market_confirmation": market_confirmation_df,
+        "catalyst_scores": catalyst_df,
+        "expectations_risk": expectations_df,
+        "opportunity_ranking": opportunity_ranking,
         "qualified_theme_count": qualified_theme_count,
         "news_top_ticker_share": round(news_top_ticker_share, 3),
         "news_top_ticker": news_top_ticker,
