@@ -6,7 +6,7 @@ Streamlit dashboard for tracking the GLP-1, Eli Lilly, AI-biotech, cardiometabol
 
 Version 1 is finished as of 2026-07-19. The Streamlit dashboard pulls yfinance market data, ingests Yahoo Finance RSS stories, classifies news themes, scores the GLP-1 flywheel, and writes audit/report artifacts on each run.
 
-A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phase 1 (analytical structure only; no allocation tiers or portfolio recommendations) is complete: adversarial review findings were fixed and live Windows validation passed. Phase 2 remains gated pending explicit approval.
+A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phase 1 (analytical structure only; no allocation tiers or portfolio recommendations) is complete and merged: adversarial review findings were fixed and live Windows validation passed. Phase 2 (sleeve-level opportunity scoring) was approved 2026-10-11 and is in implementation.
 
 The news engine now uses ticker headline feeds, a keyword prefilter, source derivation, a 21-day story window, and a stricter healthcare relevance gate before story classification, sentiment, ticker tagging, and scoring. The scoring path also uses a smaller qualified-story subset so one noisy feed cannot overwhelm the flywheel score.
 
@@ -47,7 +47,7 @@ The upgrade will be implemented in gated phases:
 - Phase 4: explicit capital-allocation decision layer.
 - Phase 5: position-level decisions, decision journal, and accountability.
 
-Only Phase 1 has been implemented. Later phases require explicit review and approval.
+Phases 1 and 2 are implemented (Phase 2 pending review and live validation). Later phases require explicit review and approval.
 
 Phase 1 adds a `Health Stack Confirmation Structure` section to the report and dashboard:
 
