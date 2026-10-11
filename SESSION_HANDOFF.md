@@ -19,7 +19,7 @@ The current documented live baseline is:
 
 ## Phase 1 Status (2026-10-11)
 
-Phase 1 is implemented on branch `muse/phase-1-confirmation-structure` and is NOT merged to master.
+Phase 1 is implemented on branch `muse/phase-1-confirmation-structure` and is NOT merged to master. Adversarial review is complete; all findings were fixed on the branch. Live Windows validation passed 2026-10-11 (new report section renders coherently).
 
 What was built (per the operator's 2026-10-11 decisions):
 
@@ -29,14 +29,17 @@ What was built (per the operator's 2026-10-11 decisions):
 - Precedence-ordered eight-state confirmation classifier + leader/stack assessments (`glp1_watch/confirmation_state.py`).
 - Heuristic news-event clustering (`glp1_watch/news_event_clustering.py`).
 - Pipeline wiring, `Health Stack Confirmation Structure` report section, Streamlit expander.
-- 38 new tests, all passing. Full suite: 72 passed, 4 failed — the 4 failures are pre-existing `test_news.py` date-window artifacts (fail on master too).
+- 57 new tests, all passing. Full suite: 91 passed, 4 failed — the 4 failures are pre-existing `test_news.py` date-window artifacts (fail on master too).
 - Documented Phase 1 limitations: two-name Health Data and Clinical AI sleeve; heuristic clustering.
 
 Remaining before Phase 1 is considered complete:
 
-1. Adversarial review of the branch by a separate agent (operator requirement), with findings fixed.
-2. Live validation run from a normal Windows shell: `python generate_snapshot.py` (Yahoo/RSS unreachable from sandbox/VM), confirm the new report section renders on real data and no existing outputs regress.
-3. Merge to master after review + live run.
+1. ~~Adversarial review~~ done 2026-10-11; findings fixed on the branch:
+   - Real fuzzy event clustering (theme + ticker overlap + title Jaccard >= 0.3 + 72h window).
+   - `qualified_theme_count` / `news_top_ticker_share` wired into the classifier as downward-only constraints.
+   - AI Infrastructure Enablers as an explicit classifier input (blocks Broadly Confirming when deteriorating; never upgrades).
+2. ~~Live validation run~~ done 2026-10-11 on Windows: new section renders coherently. (Note: first live run showed 85 unique events from 85 stories / zero multi-source — the exact-clustering limitation that finding 1 fixed; re-run `generate_snapshot.py` on Windows after these fixes to confirm clustering now merges syndicated coverage.)
+3. Merge to master after operator approval.
 
 ## Phase Gate
 
