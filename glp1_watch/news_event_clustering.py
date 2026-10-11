@@ -51,8 +51,8 @@ EVENT_COLUMNS = [
 
 
 def _independent_source_count(sources: pd.Series) -> int:
-    cleaned = sources.fillna("").astype(str).str.strip()
-    cleaned = cleaned[~cleaned.str.lower().isin({"", "unknown"})]
+    cleaned = sources.fillna("").astype(str).str.strip().str.lower()
+    cleaned = cleaned[~cleaned.isin({"", "unknown"})]
     return int(cleaned.nunique())
 
 
