@@ -78,11 +78,35 @@ Phase 2 completion checks:
 2. ~~Live validation run~~ done 2026-10-11 (Linux, real market + news data): `generate_snapshot.py` completed (stance Neutral, flywheel 42.8); Opportunity Ranking rendered all eight sleeves plausibly (Health Data and Clinical AI 59.3 first; Gene Editing 38.9 last; no recognition gaps). Caught and fixed one live-only bug: ticker `KeyError` on comma-space lists in `expectations_risk.py` (+ regression test). A confirmatory run on the operator's Windows machine is still welcome but no longer blocking.
 3. Operator merge approval — pending.
 
+## Phase 3 Status (2026-10-11)
+
+Phase 3 was approved 2026-10-11 and implemented on branch `muse/phase-3-persistence-readiness`.
+
+What was built:
+
+- `glp1_watch/persistence_engine.py`: history store, persistence metrics, seven-state readiness classification, what-changed diffing.
+- `## Persistence and Decision Readiness` and `## What Changed Since the Previous Report` report sections + Streamlit expander.
+- 19 new tests, all passing.
+
+Operator decisions applied (per standing instruction to decide and document):
+
+- CSV store at `output/history/health_stack_history.csv` (spec allows CSV or SQLite; CSV matches project conventions).
+- Upsert on (as_of_date, sleeve); improvement = delta >= 1.0 point; strong/weak cutoffs reuse decision weights (65/45).
+- Readiness precedence: Insufficient Evidence → Repairing → Exhausted → Persistent → Confirmed → Developing → Early Signal; Exhausted outranks Persistent by design.
+- Conflicting evidence always reported alongside the classification.
+- History starts cold (no backfill possible); early runs read Insufficient Evidence until streaks form.
+
+Phase 3 completion checks:
+
+1. Adversarial review — pending (separate agent).
+2. Live validation run — pending.
+3. Operator merge approval — pending.
+
 ## Phase Gate
 
-Phase 3 (persistence, history, recommendation readiness) is gated: do not begin until Phase 2 is reviewed, live-validated, merged, and explicitly approved.
+Phase 4 (capital allocation decision layer) is gated: do not begin until Phase 3 is reviewed, live-validated, merged, and explicitly approved.
 
-The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 2 is complete.
+The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 3 is complete.
 
 ## Important Guardrails
 
