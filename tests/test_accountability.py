@@ -126,6 +126,24 @@ class GatingTests(unittest.TestCase):
         self.assertTrue(any("not a performance verdict" in line for line in lines))
 
 
+class NotRatedExclusionTests(unittest.TestCase):
+    """M3: NOT RATED rows are not decisions and never appear in graded groups."""
+
+    def test_not_rated_excluded_from_graded_groups(self):
+        from glp1_watch.position_engine import REC_NOT_RATED
+
+        journal = make_journal(
+            [journal_row("ticker", f"T{i}", "INCREASE", 0.05) for i in range(12)]
+            + [journal_row("ticker", "NR1", REC_NOT_RATED, 0.50) for _ in range(3)]
+        )
+        m = ac.compute_accountability(journal, flat_prices())
+        # The 3 NOT RATED rows are excluded from n and from groups.
+        self.assertEqual(m["n_with_3m_outcome"]["n"], 12)
+        self.assertNotIn(REC_NOT_RATED, m["by_recommendation"])
+        # Their +50% outcomes do not leak into the INCREASE average.
+        self.assertAlmostEqual(m["avg_3m_after_increase"]["value"], 0.05)
+
+
 class CommitteePointerTests(unittest.TestCase):
     def test_pointer_material(self):
         divergences = [{"ticker": "AAA"}]

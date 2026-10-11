@@ -57,6 +57,38 @@ JOURNAL_COLUMNS = DECISION_FIELDS + OUTCOME_FIELDS
 HORIZON_DAYS = {"1m": 30, "3m": 91, "6m": 182}
 
 
+def _is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _normalize_key(entity_type: object, entity_name: object) -> tuple[str, str]:
+    """Journal-boundary normalization (M7b).
+
+    entity_type is lowercased/stripped and must be "sleeve" or "ticker".
+    Ticker names are uppercased/stripped; sleeve names keep their canonical
+    casing (stripped). Cheapest to enforce before history accumulates.
+    """
+    etype = "" if _is_missing(entity_type) else str(entity_type).strip().lower()
+    if etype not in (ENTITY_SLEEVE, ENTITY_TICKER):
+        raise ValueError(
+            f"decision_journal: invalid entity_type {entity_type!r}; "
+            f"must be {ENTITY_SLEEVE!r} or {ENTITY_TICKER!r}"
+        )
+    if _is_missing(entity_name):
+        raise ValueError("decision_journal: entity_name must not be blank")
+    name = str(entity_name).strip()
+    if etype == ENTITY_TICKER:
+        name = name.upper()
+    if not name:
+        raise ValueError("decision_journal: entity_name must not be blank")
+    return etype, name
+
+
 def _journal_path(history_dir: str | Path) -> Path:
     return Path(history_dir) / JOURNAL_FILENAME
 
@@ -88,13 +120,35 @@ def _write_journal(history_dir: str | Path, frame: pd.DataFrame) -> pd.DataFrame
     path.parent.mkdir(parents=True, exist_ok=True)
     out = frame.copy()
     if not out.empty:
-        out = out.drop_duplicates(
-            subset=["decision_date", "entity_type", "entity_name"], keep="last"
-        )
+        # Normalize keys at the write boundary, then reject duplicates
+        # loudly (M7a/M7b): silent keep="last"/"first" could overwrite
+        # immutable decision fields.
+        for col in ("entity_type", "entity_name"):
+            if col not in out.columns:
+                out[col] = ""
+        normalized = [
+            _normalize_key(et, en)
+            for et, en in zip(out["entity_type"], out["entity_name"])
+        ]
+        out["entity_type"] = [et for et, _ in normalized]
+        out["entity_name"] = [en for _, en in normalized]
         out["decision_date"] = pd.to_datetime(
             out["decision_date"], format="%Y-%m-%d", errors="coerce"
         )
         out = out.dropna(subset=["decision_date", "entity_type", "entity_name"])
+        dupes = out.duplicated(
+            subset=["decision_date", "entity_type", "entity_name"], keep=False
+        )
+        if dupes.any():
+            bad = (
+                out.loc[dupes, ["decision_date", "entity_type", "entity_name"]]
+                .drop_duplicates()
+                .to_dict("records")
+            )
+            raise ValueError(
+                "decision_journal: duplicate keys rejected — decision-time "
+                f"fields are immutable and must not be overwritten: {bad}"
+            )
         out = out.sort_values(["decision_date", "entity_type", "entity_name"]).reset_index(
             drop=True
         )
@@ -141,11 +195,14 @@ def append_journal_entries(
 
     new_rows = []
     for entry in entries:
-        key = (date_str, str(entry["entity_type"]), str(entry["entity_name"]))
+        etype, ename = _normalize_key(entry.get("entity_type"), entry.get("entity_name"))
+        key = (date_str, etype, ename)
         if key in existing_keys:
             continue  # immutable: never re-insert decision-time fields
         row = {col: entry.get(col) for col in JOURNAL_COLUMNS}
         row["decision_date"] = date_str
+        row["entity_type"] = etype
+        row["entity_name"] = ename
         new_rows.append(row)
 
     if not new_rows:
@@ -236,15 +293,21 @@ def fill_forward_outcomes(
                 if not member_closes:
                     continue
                 fwd_returns = []
+                price_dates = []
                 for ticker in member_closes:
-                    base, _ = _first_close_on_or_after(closes[ticker], decision_date)
-                    price, _ = _first_close_on_or_after(closes[ticker], maturity)
+                    # M5: same decision-date convention as tickers — last
+                    # close on or before the decision date for the base.
+                    base, _ = _last_close_on_or_before(closes[ticker], decision_date)
+                    price, price_date = _first_close_on_or_after(closes[ticker], maturity)
                     if base and price:
                         fwd_returns.append(price / base - 1.0)
+                        price_dates.append(price_date)
                 if not fwd_returns:
                     continue
                 out.at[idx, ret_col] = sum(fwd_returns) / len(fwd_returns)
-                out.at[idx, date_col] = maturity.strftime("%Y-%m-%d")
+                # M4: record the actual trading date used (the latest member
+                # price date), never a synthetic Sunday maturity date.
+                out.at[idx, date_col] = max(price_dates).strftime("%Y-%m-%d")
     return out
 
 
@@ -290,6 +353,14 @@ def _extract_closes(price_history: pd.DataFrame) -> pd.DataFrame:
     else:
         closes = frame
     closes.index = pd.to_datetime(closes.index)
+    # M2: normalize tz-aware indexes to tz-naive at the fill boundary.
+    # A tz-aware price index must never crash the unconditional journal-fill
+    # path with a tz-naive/tz-aware comparison TypeError.
+    try:
+        if closes.index.tz is not None:
+            closes.index = closes.index.tz_localize(None)
+    except AttributeError:
+        pass
     return closes.sort_index()
 
 

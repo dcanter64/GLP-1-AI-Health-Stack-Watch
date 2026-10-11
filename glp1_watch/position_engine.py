@@ -41,6 +41,10 @@ from .decision_engine import (
 
 METHODOLOGY_VERSION = "phase5-v1"
 
+# Explicit not-rated marker (M3): HOLD is an actionable call and must never
+# be recorded for names without sufficient technical or thesis data.
+REC_NOT_RATED = "NOT RATED"
+
 # Position statuses (spec). Precedence-ordered: defensive states and hard
 # invalidations first, constructive states last. INSUFFICIENT_STATUS sits
 # outside the 13 as the explicit not-rated outcome.
@@ -112,7 +116,13 @@ def _safe_float(value: object) -> float | None:
 
 
 def _safe_bool(value: object) -> bool | None:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+    # M6: missing scalar values degrade to Not Rated rather than crash.
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
         return None
     return bool(value)
 
@@ -287,7 +297,7 @@ def build_position_card(
             "ticker": ticker,
             "sleeve": perf.get("sleeve"),
             "status": INSUFFICIENT_STATUS,
-            "recommendation": REC_HOLD,
+            "recommendation": REC_NOT_RATED,
             "tier": None,
             "confidence": 0.0,
             "confidence_band": "Low",

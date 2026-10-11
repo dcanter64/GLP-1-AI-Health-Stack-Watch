@@ -32,6 +32,7 @@ from .decision_engine import (
     REC_STRONG_REDUCE,
 )
 from .decision_journal import ENTITY_SLEEVE, ENTITY_TICKER, _extract_closes
+from .position_engine import REC_NOT_RATED
 
 INCREASE_TYPES = frozenset({REC_STRONG_INCREASE, REC_INCREASE, REC_ACCUMULATE})
 REDUCE_TYPES = frozenset({REC_REDUCE, REC_STRONG_REDUCE, REC_AVOID})
@@ -148,7 +149,13 @@ def compute_accountability(
     min_n_rates: int = MIN_N_RATES,
     min_n_avg: int = MIN_N_AVG,
 ) -> dict:
-    """Accountability metrics from recorded 3M forward outcomes."""
+    """Accountability metrics from recorded 3M forward outcomes.
+
+    M3: NOT RATED rows are not decisions and are excluded from all graded
+    groups — they must never appear as a HOLD call in accountability.
+    """
+    if journal is not None and not journal.empty and "recommendation" in journal.columns:
+        journal = journal[~journal["recommendation"].isin({REC_NOT_RATED})]
     frame = _with_3m_outcome(journal)
     n = len(frame)
     # Confidence band is derived, not stored — the journal keeps the raw
