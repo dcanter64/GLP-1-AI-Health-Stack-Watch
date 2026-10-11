@@ -55,6 +55,15 @@ def build_confirmation_structure_section(snapshot: dict) -> list[str]:
         f"- Deteriorating sleeves: {len(deteriorating)} of 7 required"
         + (f" ({', '.join(deteriorating)})" if deteriorating else ""),
     ]
+    def _format_share(value: object, precision: int = 0) -> str:
+        try:
+            number = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return "n/a"
+        if pd.isna(number):
+            return "n/a"
+        return f"{number:.{precision}%}"
+
     if summaries is not None and not summaries.empty:
         required = summaries[summaries["required"]]
         supporting = summaries[~summaries["required"]]
@@ -63,22 +72,25 @@ def build_confirmation_structure_section(snapshot: dict) -> list[str]:
             weakest = required.sort_values("avg_return_3m", ascending=True).iloc[0]
             lines.append(
                 f"- Strongest required sleeve: {strongest['sleeve']} "
-                f"({strongest['avg_return_3m']:.1%} avg 3M, {strongest['status']})"
+                f"({_format_share(strongest['avg_return_3m'], 1)} avg 3M, {strongest['status']})"
             )
             lines.append(
                 f"- Weakest required sleeve: {weakest['sleeve']} "
-                f"({weakest['avg_return_3m']:.1%} avg 3M, {weakest['status']})"
+                f"({_format_share(weakest['avg_return_3m'], 1)} avg 3M, {weakest['status']})"
             )
         for _, row in supporting.iterrows():
             lines.append(
                 f"- Supporting sleeve {row['sleeve']}: {row['status']} "
                 f"(excluded from core breadth counts)"
             )
-    lines.append(
-        f"- Core health-stack breadth: {concentration.get('pct_above_50dma', 0):.0%} above 50DMA, "
-        f"{concentration.get('pct_outperform_xlv', 0):.0%} outperforming XLV "
-        f"(required sleeves only)"
+    breadth_line = (
+        f"- Core health-stack breadth: {_format_share(concentration.get('pct_above_50dma'))} "
+        f"above 50DMA, {_format_share(concentration.get('pct_outperform_xlv'))} "
+        f"outperforming XLV (required sleeves only)"
     )
+    if concentration.get("verdict") == "insufficient data":
+        breadth_line += " — insufficient data"
+    lines.append(breadth_line)
     lines.extend(
         [
             f"- Unique news events: {event_counts.get('unique_events', 0)} "
