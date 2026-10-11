@@ -109,15 +109,25 @@ Phase 3 completion checks:
 
 ## Phase 4 status (2026-10-11)
 
-Implemented on branch `muse/phase-4-decision-layer` (not pushed yet — single-push rule).
+Merged to master as `09057b4` (operator-approved; byte-identical verified).
 Completion checks:
 1. ~~Adversarial review~~ done 2026-10-11 (separate agent, empirical, ~120 assertions): 0 critical, 1 major, 5 minor — all fixed and re-verified on the branch (see CHANGELOG).
-2. Live validation — done (see above).
-3. Operator merge approval — pending.
+2. Live validation — done.
+3. Operator merge approval — granted 2026-10-11 ("merge and then begin phase 5").
+
+## Phase 5 status (2026-10-11)
+
+Implemented on branch `muse/phase-5-positions-accountability` (not pushed yet — single-push rule).
+Operator approved all 7 design decisions plus guardrails 2026-10-11.
+Completion checks:
+1. Tests — 57 new tests, full suite 266 passing (4 pre-existing test_news.py date-decay failures also fail on master).
+2. Adversarial review — done 2026-10-11 (separate agent, empirical, 201 assertions): 1 major (M1, §1 pointer firing on below-minimum data), 5 minor (M2–M6), 1 observation — M1 fixed on the branch; Codex decided M2–M6 + M7a/M7b fix now, M7c wont-fix; all fixed with regression tests, full suite 281 passing (4 pre-existing failures, also on master) — Codex approved PR #5 to merge (see CHANGELOG).
+3. Live validation — done 2026-10-11: Neutral, flywheel 42.8, journal's first 43 rows recorded (all honestly Not Rated on cold sleeve history, 0 outcomes matured), Track A ran (274 days, exploratory label).
+4. Operator merge approval — pending.
 
 ## Phase Gate
 
-Phase 4 (capital allocation decision layer) is gated: do not begin until Phase 3 is reviewed, live-validated, merged, and explicitly approved.
+All five phases are implemented. Phase 5 awaits merge approval.
 
 The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 3 is complete.
 
