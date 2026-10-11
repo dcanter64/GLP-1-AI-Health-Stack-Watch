@@ -48,3 +48,18 @@ trend_weak_threshold: 45
 recognition_gap_structural_min: 60
 recognition_gap_catalyst_min: 60
 recognition_gap_market_max: 45
+
+# Phase 4: confidence scoring weights for the Capital Allocation Decision
+# Layer. Nine inputs, must sum to 1.0. Confidence is the probabilistic
+# expression of each recommendation (0-100, banded Low/Moderate/High/
+# Very High) — not a literal outcome probability.
+confidence_weights:
+  signal_persistence: 0.15
+  price_fundamentals_agreement: 0.12
+  breadth: 0.12
+  data_quality: 0.10
+  catalyst_diversity: 0.08
+  leadership_concentration: 0.10
+  time_horizon_agreement: 0.08
+  conflict_degree: 0.10
+  historical_stability: 0.15

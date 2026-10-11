@@ -23,6 +23,16 @@ market_confirmation_weights:
   rs_breadth: 0.5
 expectations_risk_weights:
   acceleration: 1.0
+confidence_weights:
+  signal_persistence: 0.15
+  price_fundamentals_agreement: 0.12
+  breadth: 0.12
+  data_quality: 0.10
+  catalyst_diversity: 0.08
+  leadership_concentration: 0.10
+  time_horizon_agreement: 0.08
+  conflict_degree: 0.10
+  historical_stability: 0.15
 interpretation_bands:
   - [80, "Strong opportunity"]
   - [0, "Broken or highly speculative"]
@@ -48,6 +58,8 @@ class DecisionWeightsTests(unittest.TestCase):
         self.assertAlmostEqual(sum(weights.opportunity.values()), 1.0)
         self.assertAlmostEqual(sum(weights.market_confirmation.values()), 1.0)
         self.assertAlmostEqual(sum(weights.expectations_risk.values()), 1.0)
+        self.assertAlmostEqual(sum(weights.confidence.values()), 1.0)
+        self.assertEqual(len(weights.confidence), 9)
         self.assertEqual(weights.catalyst_saturation_per_category, 3)
         self.assertGreater(
             weights.trend_strong_threshold, weights.trend_weak_threshold
