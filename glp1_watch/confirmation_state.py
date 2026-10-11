@@ -14,6 +14,13 @@ Precedence notes:
   verdict to be "broad", so concentrated single-name strength can never
   masquerade as broad health (it falls through to Leader-Dependent or
   Selectively Confirming instead).
+- Broad confirmation also requires catalyst breadth (>= 3 qualified themes),
+  news breadth (no single ticker dominating coverage), and a non-deteriorating
+  supporting AI Infrastructure sleeve. Each of these can only constrain the
+  state downward, never upgrade it.
+- "Leader-Dependent" fires on market concentration (top-name share) or on
+  news concentration: when coverage is dominated by a leader-sleeve ticker
+  and the leader sleeve confirms.
 - "Early Repair" is shadowed by "Selectively Confirming": it is reachable
   only when 2 or fewer sleeves confirm.
 - Only "Low" market-data quality (not "Partial") triggers Insufficient
@@ -58,14 +65,25 @@ def _rule_table() -> list[tuple[str, Callable[[dict], bool], str]]:
             lambda c: c["overall_score"] >= 70
             and c["confirming_count"] >= 5
             and c["breadth_50dma"] >= 0.6
-            and c["concentration_verdict"] == "broad",
+            and c["concentration_verdict"] == "broad"
+            and c["qualified_theme_count"] >= 3
+            and c["news_top_ticker_share"] < 0.5
+            and c["supporting_sleeve_status"] != "deteriorating",
             "score >= 70 with 5+ confirming sleeves, strong 50DMA participation, "
-            "and broadly distributed gains",
+            "broadly distributed gains, multi-theme catalysts, unconcentrated news, "
+            "and no AI-infrastructure divergence",
         ),
         (
             STATE_LEADER_DEPENDENT,
-            lambda c: c["concentration_verdict"] == "leader-dependent"
-            and c["leader_status"] == "confirming",
+            lambda c: (
+                c["concentration_verdict"] == "leader-dependent"
+                and c["leader_status"] == "confirming"
+            )
+            or (
+                c["news_top_ticker_share"] >= 0.6
+                and c["news_top_ticker"] in c["leader_tickers"]
+                and c["leader_status"] == "confirming"
+            ),
             "evidence concentrates in the leader sleeve while the stack lags",
         ),
         (
@@ -108,11 +126,21 @@ def classify_confirmation_state(
     leader_status: str,
     market_data_quality: str,
     core_coverage: float,
+    qualified_theme_count: int,
+    news_top_ticker_share: float,
+    news_top_ticker: str | None,
+    leader_tickers: tuple[str, ...],
+    supporting_sleeve_status: str,
 ) -> dict[str, str]:
     """Classify into one confirmation state.
 
     Returns ``{"state": ..., "reason": ...}``. All inputs are plain values so
     the classifier stays free of DataFrame plumbing and trivially testable.
+
+    The news inputs (catalyst breadth, news concentration) and the supporting
+    AI Infrastructure sleeve status can only constrain the state downward:
+    they can block "Broadly Confirming" or trigger "Leader-Dependent", never
+    upgrade a weaker read.
     """
     context = {
         "overall_score": float(overall_score),
@@ -123,6 +151,11 @@ def classify_confirmation_state(
         "leader_status": str(leader_status),
         "market_data_quality": str(market_data_quality),
         "core_coverage": float(core_coverage),
+        "qualified_theme_count": int(qualified_theme_count),
+        "news_top_ticker_share": float(news_top_ticker_share),
+        "news_top_ticker": news_top_ticker,
+        "leader_tickers": tuple(leader_tickers),
+        "supporting_sleeve_status": str(supporting_sleeve_status),
     }
     for state, predicate, reason in _rule_table():
         if predicate(context):
