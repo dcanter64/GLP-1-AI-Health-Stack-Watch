@@ -16,7 +16,7 @@ Run the dashboard and project tests with the `.venv` activated.
 
 GLP-1 AI Health Stack Watch v1 is finished as of 2026-07-19 and runnable as a Streamlit dashboard.
 
-The next major effort is a phased upgrade toward a GLP-1 and AI-Health Capital Allocation Decision Layer. This upgrade must proceed one phase at a time. Phase 1 is the only approved next implementation scope unless the user explicitly approves a later phase.
+The phased upgrade toward a GLP-1 and AI-Health Capital Allocation Decision Layer is complete — all five phases were approved, implemented, and merged to master on 2026-10-11 (see "Decision-Layer Upgrade — Complete (2026-10-12)" below).
 
 Completed:
 
@@ -167,7 +167,7 @@ See `PHASE_1_IMPLEMENTATION_PLAN.md` for the implementation plan.
 
 ### Phase 2: Add Sleeve-Level Opportunity Scoring
 
-Status: implemented 2026-10-11 on branch `muse/phase-2-opportunity-scoring`; pending adversarial review and live validation.
+Status: complete — merged to master 2026-10-11 via PR #2 (`a78b1a8`); adversarial review findings fixed, live validation passed.
 
 Implemented:
 
@@ -185,7 +185,7 @@ Documented Phase 2 limitations: Structural Thesis is a news-evidence proxy (no f
 
 ### Phase 3: Add Persistence, History, and Recommendation Readiness
 
-Status: implemented 2026-10-11 on branch `muse/phase-3-persistence-readiness`; pending adversarial review and live validation.
+Status: complete — merged to master 2026-10-11 via PR #3 (`c8840b8`); adversarial review findings fixed, live validation passed.
 
 Implemented:
 
@@ -200,25 +200,44 @@ Documented Phase 3 limitations: history starts cold (no backfill of pre-Phase-3 
 
 Status: merged to master 2026-10-11 as `09057b4` (operator-approved merge; byte-identical verified).
 
-Planned additions:
+Delivered:
 
-- Add sleeve recommendations.
-- Add allocation tiers.
-- Add leader decision and broad-stack decision.
-- Add broad vs selective exposure classification.
-- Add confidence, urgency, tactical, and strategic views.
-- Add upgrade, downgrade, and invalidation conditions.
+- Sleeve recommendations.
+- Allocation tiers.
+- Leader decision and broad-stack decision.
+- Broad vs selective exposure classification.
+- Confidence, urgency, tactical, and strategic views.
+- Upgrade, downgrade, and invalidation conditions.
 
 ### Phase 5: Add Position-Level Decisions and Accountability
 
-Status: in progress — implemented on branch `muse/phase-5-positions-accountability`. Operator approved all 7 design decisions 2026-10-11 (precedence-ordered 13-status classifier + explicit Not Rated outcome; sleeve tier −1 rule with floor 0 and no price-action upgrades; two-track backtesting with honesty guardrails; absolute + relative FP/FN definitions; single sleeve+ticker journal file with immutable decision fields; automatic forward-fill at maturity; §§9–10 report placement) plus guardrails (analytical only; ticker calls cannot override broad-stack exposure; insufficient history ≠ poor performance; min-n gating; dry-run purity).
+Status: complete — merged to master 2026-10-11 via PR #5 (`49b5a83`; byte-identical verified). Operator approved all 7 design decisions 2026-10-11 (precedence-ordered 13-status classifier + explicit Not Rated outcome; sleeve tier −1 rule with floor 0 and no price-action upgrades; two-track backtesting with honesty guardrails; absolute + relative FP/FN definitions; single sleeve+ticker journal file with immutable decision fields; automatic forward-fill at maturity; §§9–10 report placement) plus guardrails (analytical only; ticker calls cannot override broad-stack exposure; insufficient history ≠ poor performance; min-n gating; dry-run purity). Codex-directed fix-now items M2–M6 and M7a/M7b landed with regression tests before merge; M7c is wont-fix (Track A no-lookahead vacuity is inherent — survivorship bias disclosed, genuine no-lookahead enforced in Track B).
 
-Planned additions:
+Delivered:
 
-- Add ticker-level decisions.
-- Add decision journal.
-- Add historical accountability metrics.
-- Add basic backtesting where reliable.
+- Ticker-level decisions (`glp1_watch/position_engine.py` — 13-status classifier).
+- Decision journal (`glp1_watch/decision_journal.py` — immutable, forward outcomes at maturity only).
+- Historical accountability metrics (`glp1_watch/accountability.py` — min-n gated).
+- Two-track backtesting (`glp1_watch/backtest.py` — exploratory Track A with survivorship labeling, walk-forward Track B).
+
+## Decision-Layer Upgrade — Complete (2026-10-12)
+
+All five Decision-Layer phases are complete and merged to master:
+
+- Phase 1: analytical structure — merged (`db0f0ec`)
+- Phase 2: sleeve-level opportunity scoring — merged via PR #2 (`a78b1a8`)
+- Phase 3: persistence, history, recommendation readiness — merged via PR #3 (`c8840b8`)
+- Phase 4: capital allocation decision layer — merged via PR #4 (`09057b4`)
+- Phase 5: position-level decisions and accountability — merged via PR #5 (`49b5a83`)
+
+Each phase passed adversarial review (findings fixed) and live validation before merge.
+PR #6 (2026-10-12) fixed the 4 pre-existing `test_news.py` date-decay failures with time-relative fixtures — tests only, no production change. Verified result: **285/285 tests passing**.
+
+Future improvements (not unfinished work):
+
+- M7c wont-fix: Track A exploratory backtests cannot satisfy a strict no-lookahead invariant under fixed membership — survivorship bias is disclosed, Track B is the honest walk-forward path.
+- Analytical-only by design: no trade execution and no personalized sizing, per the standing Codex boundary.
+- Structural Thesis remains a news-evidence proxy (no fundamentals feed); Expectations Risk confidence stays capped at Medium (no valuation/earnings-revision data).
 
 ## Cleanup Notes
 

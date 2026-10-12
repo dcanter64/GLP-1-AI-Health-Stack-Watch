@@ -6,7 +6,7 @@ Streamlit dashboard for tracking the GLP-1, Eli Lilly, AI-biotech, cardiometabol
 
 Version 1 is finished as of 2026-07-19. The Streamlit dashboard pulls yfinance market data, ingests Yahoo Finance RSS stories, classifies news themes, scores the GLP-1 flywheel, and writes audit/report artifacts on each run.
 
-A major phased upgrade is underway. The long-term target is to evolve the project into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, but this must be done one approved phase at a time. Phases 1–4 are complete and merged (adversarial reviews fixed, live validation passed each phase). Phase 5 (position-level decisions, decision journal, accountability) is in implementation on a feature branch, pending review and live validation. All recommendations remain analytical — no trade execution, no personalized sizing.
+A major phased upgrade is now complete. The project has evolved into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, built one approved phase at a time. All five phases are complete and merged to master (PRs #1–#5; adversarial reviews fixed and live validation passed each phase). PR #6 (2026-10-11/12) fixed the 4 pre-existing `test_news.py` date-decay failures; full suite: 285/285 passing. All recommendations remain analytical — no trade execution, no personalized sizing.
 
 The news engine now uses ticker headline feeds, a keyword prefilter, source derivation, a 21-day story window, and a stricter healthcare relevance gate before story classification, sentiment, ticker tagging, and scoring. The scoring path also uses a smaller qualified-story subset so one noisy feed cannot overwhelm the flywheel score.
 
@@ -39,7 +39,7 @@ See `roadmap.md` for the completion record and operating notes.
 
 ## Decision-Layer Upgrade
 
-The upgrade will be implemented in gated phases:
+The upgrade was implemented in gated phases:
 
 - Phase 1: analytical structure, investment sleeves, confirmation-state classification, leader concentration, leader-vs-stack conclusions, and news event clustering.
 - Phase 2: sleeve-level opportunity scoring.
@@ -47,7 +47,7 @@ The upgrade will be implemented in gated phases:
 - Phase 4: explicit capital-allocation decision layer.
 - Phase 5: position-level decisions, decision journal, and accountability.
 
-Phases 1–4 are implemented and merged. Phase 5 is implemented on a feature branch, pending review and live validation.
+Phases 1–5 are implemented and merged to master.
 
 Phase 1 adds a `Health Stack Confirmation Structure` section to the report and dashboard:
 

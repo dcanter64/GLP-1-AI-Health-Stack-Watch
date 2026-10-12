@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed (2026-10-12)
+
+- PR #6: fixed the 4 pre-existing `test_news.py` date-decay failures. Root cause was a single time-bomb, not four classifier bugs — fixtures used hardcoded 2026-07-08 `published_at` dates that aged past the 21-day news window, so every fixture was rejected as stale before classification ran. Fix is tests-only: new `_published_at(days_ago)` helper makes fixture dates relative to now (the age gate itself is unchanged and still covered by `test_build_articles_frame_rejects_stale_story`). Verified result: full suite 285/285 passing.
+
+### Docs (2026-10-12)
+
+- Synchronized `roadmap.md`, `README.md`, `SESSION_HANDOFF.md`: all five Decision-Layer phases explicitly recorded as complete and merged (PRs #1–#5). Genuine limitations (M7c wont-fix, analytical-only boundary, news-evidence proxy) preserved as future improvements.
+
 ### Added (Phase 1, 2026-10-11)
 
 - `config/health_stack_sleeves.yaml`: eight configurable health-stack sleeves (seven required + supporting AI Infrastructure Enablers) with operator-approved rosters.
@@ -40,7 +48,7 @@
 
 ### Planned
 
-- All five phases are now implemented (Phase 5 pending review and live validation).
+- All five phases are now implemented, adversarially reviewed, live-validated, and merged to master (PRs #1–#5, 2026-10-11).
 - Preserve the full Phase 1-5 upgrade specification in `DECISION_LAYER_UPGRADE_SPEC.md`.
 
 ### Recent Baseline
