@@ -1,8 +1,19 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from glp1_watch.news import build_articles_frame, classify_theme, derive_source_name, keyword_candidate_has_evidence, score_sentiment, yahoo_ticker_rss_url
+
+
+def _published_at(days_ago: float) -> str:
+    """Fixture timestamp relative to now.
+
+    Relevance tests use fixed 2026-07 dates that aged out of the 21-day news
+    window, so every fixture was rejected as stale before classification ran.
+    Relative dates keep these tests about classification, not the calendar.
+    """
+    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
 
 
 class NewsClassificationTests(unittest.TestCase):
@@ -21,7 +32,7 @@ class NewsClassificationTests(unittest.TestCase):
                     "url": "https://example.com/story-1",
                     "source": "Reuters",
                     "rss_metadata": "Reuters | Healthcare",
-                    "published_at": "2026-07-08T23:55:37+00:00",
+                    "published_at": _published_at(2),
                 }
             ]
         )
@@ -43,7 +54,7 @@ class NewsClassificationTests(unittest.TestCase):
                     "url": "https://example.com/story-2",
                     "source": "Yahoo Finance",
                     "rss_metadata": "Yahoo Finance | Technology",
-                    "published_at": "2026-07-08T23:55:37+00:00",
+                    "published_at": _published_at(2),
                 }
             ]
         )
@@ -66,7 +77,7 @@ class NewsClassificationTests(unittest.TestCase):
                     "url": "https://example.com/story-3",
                     "source": "Reuters",
                     "rss_metadata": "Reuters | Healthcare",
-                    "published_at": "2026-07-09T14:54:40+00:00",
+                    "published_at": _published_at(2),
                 }
             ]
         )
@@ -127,7 +138,7 @@ class NewsClassificationTests(unittest.TestCase):
                     "url": "https://www.thestreet.com/health/gallup-ozempic-glp-1-use-soars?.tsrc=rss",
                     "source": "",
                     "rss_metadata": "",
-                    "published_at": "2026-07-09T02:17:00+00:00",
+                    "published_at": _published_at(2),
                 }
             ]
         )
@@ -147,7 +158,7 @@ class NewsClassificationTests(unittest.TestCase):
                     "url": "https://finance.yahoo.com/sectors/healthcare/articles/does-phase-2b-oral-glp-131837224.html?.tsrc=rss",
                     "source": "",
                     "rss_metadata": "",
-                    "published_at": "2026-06-07T13:18:37+00:00",
+                    "published_at": _published_at(30),
                 }
             ]
         )
@@ -169,7 +180,7 @@ class NewsClassificationTests(unittest.TestCase):
                     "url": "https://www.fool.com/investing/2026/07/08/is-it-too-late-to-buy-eli-lilly/?.tsrc=rss",
                     "source": "",
                     "rss_metadata": "",
-                    "published_at": "2026-07-08T18:30:00+00:00",
+                    "published_at": _published_at(2),
                 }
             ]
         )
