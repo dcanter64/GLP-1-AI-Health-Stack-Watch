@@ -39,7 +39,7 @@ See `roadmap.md` for the completion record and operating notes.
 
 ## Decision-Layer Upgrade
 
-The upgrade will be implemented in gated phases:
+The upgrade was implemented in gated phases:
 
 - Phase 1: analytical structure, investment sleeves, confirmation-state classification, leader concentration, leader-vs-stack conclusions, and news event clustering.
 - Phase 2: sleeve-level opportunity scoring.
