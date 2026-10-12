@@ -117,17 +117,17 @@ Completion checks:
 
 ## Phase 5 status (2026-10-11)
 
-Implemented on branch `muse/phase-5-positions-accountability` (not pushed yet — single-push rule).
+Merged to master via PR #5 as `49b5a83` (operator-approved; byte-identical verified).
 Operator approved all 7 design decisions plus guardrails 2026-10-11.
 Completion checks:
 1. Tests — 57 new tests, full suite 266 passing (4 pre-existing test_news.py date-decay failures also fail on master).
 2. Adversarial review — done 2026-10-11 (separate agent, empirical, 201 assertions): 1 major (M1, §1 pointer firing on below-minimum data), 5 minor (M2–M6), 1 observation — M1 fixed on the branch; Codex decided M2–M6 + M7a/M7b fix now, M7c wont-fix; all fixed with regression tests, full suite 281 passing (4 pre-existing failures, also on master) — Codex approved PR #5 to merge (see CHANGELOG).
 3. Live validation — done 2026-10-11: Neutral, flywheel 42.8, journal's first 43 rows recorded (all honestly Not Rated on cold sleeve history, 0 outcomes matured), Track A ran (274 days, exploratory label).
-4. Operator merge approval — pending.
+4. ~~Operator merge approval~~ granted 2026-10-11; PR #5 merged as `49b5a83`.
 
 ## Phase Gate
 
-All five phases are implemented. Phase 5 awaits merge approval.
+All five phases are implemented and merged to master (PRs #1–#5, 2026-10-11). PR #6 (test fixture date-decay fix) merged 2026-10-12 — full suite 285/285 passing.
 
 The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 3 is complete.
 
