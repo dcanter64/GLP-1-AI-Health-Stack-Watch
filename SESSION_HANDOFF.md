@@ -129,7 +129,7 @@ Completion checks:
 
 All five phases are implemented and merged to master (PRs #1–#5, 2026-10-11). PR #6 (test fixture date-decay fix) merged 2026-10-12 — full suite 285/285 passing.
 
-The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md`. Use that file as the durable source for later-phase requirements after Phase 3 is complete.
+The full Phase 1-5 instructions are preserved in `DECISION_LAYER_UPGRADE_SPEC.md` as the historical record of the upgrade specification (all phases complete).
 
 ## Important Guardrails
 

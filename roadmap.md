@@ -16,7 +16,7 @@ Run the dashboard and project tests with the `.venv` activated.
 
 GLP-1 AI Health Stack Watch v1 is finished as of 2026-07-19 and runnable as a Streamlit dashboard.
 
-The next major effort is a phased upgrade toward a GLP-1 and AI-Health Capital Allocation Decision Layer. This upgrade must proceed one phase at a time. Phase 1 is the only approved next implementation scope unless the user explicitly approves a later phase.
+The phased upgrade toward a GLP-1 and AI-Health Capital Allocation Decision Layer is complete — all five phases were approved, implemented, and merged to master on 2026-10-11 (see "Decision-Layer Upgrade — Complete (2026-10-12)" below).
 
 Completed:
 
@@ -200,14 +200,14 @@ Documented Phase 3 limitations: history starts cold (no backfill of pre-Phase-3 
 
 Status: merged to master 2026-10-11 as `09057b4` (operator-approved merge; byte-identical verified).
 
-Planned additions:
+Delivered:
 
-- Add sleeve recommendations.
-- Add allocation tiers.
-- Add leader decision and broad-stack decision.
-- Add broad vs selective exposure classification.
-- Add confidence, urgency, tactical, and strategic views.
-- Add upgrade, downgrade, and invalidation conditions.
+- Sleeve recommendations.
+- Allocation tiers.
+- Leader decision and broad-stack decision.
+- Broad vs selective exposure classification.
+- Confidence, urgency, tactical, and strategic views.
+- Upgrade, downgrade, and invalidation conditions.
 
 ### Phase 5: Add Position-Level Decisions and Accountability
 
