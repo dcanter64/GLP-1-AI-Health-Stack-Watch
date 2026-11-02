@@ -1,0 +1,9 @@
+as_of_date,sleeve,required,opportunity_score,structural_score,market_confirmation_score,catalyst_score,expectations_risk_score,trend,confirmation_state,breadth_50dma,breadth_outperform_xlv,concentration_verdict,market_data_quality,news_confidence,material_event_count,flywheel_score
+2026-10-12,AI Drug-Discovery Platforms,True,54.9,60.0,89.9,5.6,63.2,Neutral and improving,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,AI Infrastructure Enablers,False,54.7,66.7,60.7,16.7,32.6,Neutral and improving,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,Broad Biotech Risk Appetite,True,50.2,50.0,69.6,0.0,33.4,Neutral and improving,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,Emerging GLP-1 Challengers,True,50.4,55.6,41.2,16.7,6.5,Neutral and deteriorating,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,Established GLP-1 Leaders,True,49.7,60.0,33.9,22.2,8.2,Neutral and deteriorating,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,Gene Editing and Precision Medicine,True,38.9,20.0,48.3,0.0,14.9,Weak but improving,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,Health Data and Clinical AI,True,59.3,60.0,88.3,5.6,38.4,Neutral and improving,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6
+2026-10-12,Large-Pharma GLP-1 Optionality,True,48.6,60.0,47.0,5.6,19.7,Neutral and deteriorating,Selectively Confirming,0.5,0.467,selective,High,High,83,43.6

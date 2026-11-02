@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
 
 JOURNAL_FILENAME = "decision_journal.csv"
+
+
+def _utc_today():
+    return datetime.now(timezone.utc).date()
 
 ENTITY_SLEEVE = "sleeve"
 ENTITY_TICKER = "ticker"
@@ -100,8 +104,19 @@ def load_journal(history_dir: str | Path) -> pd.DataFrame:
         return pd.DataFrame(columns=JOURNAL_COLUMNS)
     try:
         frame = pd.read_csv(path)
-    except Exception:
-        return pd.DataFrame(columns=JOURNAL_COLUMNS)
+    except Exception as exc:
+        raise RuntimeError(
+            f"decision_journal: cannot read journal {path}; refusing to "
+            "continue because a later write could erase it"
+        ) from exc
+    required = {"decision_date", "entity_type", "entity_name"}
+    missing_required = sorted(required - set(frame.columns))
+    if missing_required:
+        raise RuntimeError(
+            f"decision_journal: journal {path} is missing required column(s) "
+            f"{', '.join(missing_required)}; refusing to continue because a "
+            "later write could erase it"
+        )
     for column in JOURNAL_COLUMNS:
         if column not in frame.columns:
             frame[column] = pd.NA
@@ -179,7 +194,7 @@ def append_journal_entries(
     Only call when outputs are being written (dry-run purity).
     """
     date_str = as_of_dt.strftime("%Y-%m-%d")
-    today = pd.Timestamp(date.today().isoformat())
+    today = pd.Timestamp(_utc_today())
     if pd.Timestamp(date_str) > today:
         raise ValueError(
             f"decision_journal: refusing to record future decision date: {date_str}"

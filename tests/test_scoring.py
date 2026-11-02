@@ -5,7 +5,12 @@ import unittest
 import pandas as pd
 
 from glp1_watch.pipeline import build_news_confidence
-from glp1_watch.scoring import compute_lly_ai_trade_score, compute_score_snapshot, qualified_scoring_articles
+from glp1_watch.scoring import (
+    compute_lly_ai_trade_components,
+    compute_lly_ai_trade_score,
+    compute_score_snapshot,
+    qualified_scoring_articles,
+)
 
 
 class ScoringTests(unittest.TestCase):
@@ -52,7 +57,7 @@ class ScoringTests(unittest.TestCase):
 
         self.assertEqual(component_scores["LLY price momentum"], 0.0)
         self.assertEqual(component_scores["LLY relative strength vs XLV"], 0.0)
-        self.assertEqual(component_scores["LLY relative strength vs NVO"], 0.0)
+        self.assertEqual(component_scores["LLY vs NVO pair-relative strength"], 0.0)
         self.assertEqual(component_scores["Biotech risk appetite"], 0.0)
         self.assertEqual(snapshot.lly_ai_trade_score, 0.0)
         self.assertLess(snapshot.overall_score, 20.0)
@@ -88,6 +93,66 @@ class ScoringTests(unittest.TestCase):
 
         score = compute_lly_ai_trade_score(performance_table, articles_df)
         self.assertGreater(score, 60.0)
+
+    def test_lly_pair_relative_score_is_capped_when_broad_rs_is_negative(self) -> None:
+        performance = pd.DataFrame(
+            [
+                {
+                    "ticker": "LLY",
+                    "return_3m": -0.05,
+                    "distance_from_52w_high": -0.08,
+                    "above_50dma": True,
+                    "above_200dma": True,
+                    "rs_vs_xlv": -0.06,
+                    "rs_vs_qqq": -0.05,
+                    "rs_vs_spy": -0.04,
+                },
+                {"ticker": "NVO", "return_3m": -0.25},
+            ]
+        )
+
+        components = compute_lly_ai_trade_components(performance, pd.DataFrame())
+        pair = components.set_index("component").loc["LLY vs NVO pair-relative strength"]
+
+        self.assertEqual(pair["score"], 50.0)
+        self.assertIn("Capped at neutral", pair["note"])
+
+    def test_lly_component_budget_is_exactly_100_without_hidden_clamp(self) -> None:
+        performance = pd.DataFrame(
+            [
+                {
+                    "ticker": "LLY",
+                    "return_3m": 0.30,
+                    "distance_from_52w_high": 0.0,
+                    "above_50dma": True,
+                    "above_200dma": True,
+                    "rs_vs_xlv": 0.15,
+                    "rs_vs_qqq": 0.15,
+                    "rs_vs_spy": 0.15,
+                },
+                {"ticker": "NVO", "return_3m": -0.20},
+            ]
+        )
+        articles = pd.DataFrame(
+            [
+                {
+                    "theme": "GLP-1 Demand",
+                    "tickers": "LLY",
+                    "target_ticker": "LLY",
+                    "relevance_score": 1.0,
+                    "published_at": "2026-10-01",
+                    "sentiment_score": 0.5,
+                }
+                for _ in range(4)
+            ]
+        )
+        components = compute_lly_ai_trade_components(performance, articles)
+        self.assertEqual(components["max_points"].sum(), 100.0)
+        self.assertLessEqual(components["contribution"].sum(), 100.0)
+        self.assertEqual(
+            compute_lly_ai_trade_score(performance, articles),
+            round(components["contribution"].sum(), 1),
+        )
 
     def test_qualified_scoring_articles_caps_per_primary_ticker_theme_and_excludes_other(self) -> None:
         articles_df = pd.DataFrame(

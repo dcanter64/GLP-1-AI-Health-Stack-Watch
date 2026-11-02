@@ -49,6 +49,56 @@ def _rebalance_dates(index: pd.DatetimeIndex, freq_days: int = 21) -> pd.Datetim
     return index[::freq_days]
 
 
+def _simulate_equal_weight_portfolio(
+    returns: pd.DataFrame,
+    rebalance_idx: pd.DatetimeIndex,
+    transaction_cost: float,
+) -> tuple[pd.Series, pd.Series]:
+    """Return net daily returns and turnover for a periodic equal-weight strategy.
+
+    Weights are set to equal weight at inception and on scheduled rebalance
+    dates, then drift with asset returns between rebalances.  This is materially
+    different from multiplying every day's returns by a constant equal-weight
+    vector, which is a daily-rebalanced strategy and understates turnover.
+    """
+    members = list(returns.columns)
+    weights = pd.Series(0.0, index=members, dtype=float)
+    rebalance_dates = set(rebalance_idx)
+    net_returns: list[float] = []
+    turnovers: list[float] = []
+
+    for position, (as_of_date, row) in enumerate(returns.iterrows()):
+        turnover = 0.0
+        if position == 0 or as_of_date in rebalance_dates:
+            # Do not allocate to a member before it has a usable return.  Once
+            # held, a missing daily return is conservatively treated as flat.
+            eligible = row.index[row.notna()].tolist()
+            target = pd.Series(0.0, index=members, dtype=float)
+            if eligible:
+                target.loc[eligible] = 1.0 / len(eligible)
+            turnover = 1.0 if position == 0 and eligible else float(
+                (target - weights).abs().sum() / 2.0
+            )
+            weights = target
+
+        asset_returns = pd.to_numeric(row, errors="coerce").fillna(0.0)
+        gross_return = float((weights * asset_returns).sum())
+        net_returns.append(gross_return - turnover * transaction_cost)
+        turnovers.append(turnover)
+
+        # End-of-day holdings become the next day's starting weights.  A
+        # proportional transaction cost changes equity, not relative weights.
+        ending_values = weights * (1.0 + asset_returns)
+        ending_total = float(ending_values.sum())
+        if ending_total > 0:
+            weights = ending_values / ending_total
+
+    return (
+        pd.Series(net_returns, index=returns.index, dtype=float),
+        pd.Series(turnovers, index=returns.index, dtype=float),
+    )
+
+
 def run_track_a(
     price_history: pd.DataFrame,
     strategies: dict[str, list[str]],
@@ -75,22 +125,12 @@ def run_track_a(
         if not members:
             results[name] = {"status": "no members in price history"}
             continue
-        # Monthly-rebalanced equal weight. Target weights decided at each
-        # rebalance date apply from the next trading day (no lookahead);
-        # inception is fully invested from the first available return.
-        target = pd.DataFrame(float("nan"), index=returns.index, columns=members)
-        for date in rebalance_idx:
-            target.loc[date] = 1.0 / len(members)
-        target = target.ffill().fillna(0.0)
-        weights = target.shift(1)
-        weights.iloc[0] = target.iloc[0]
-        weights = weights.fillna(0.0)
-        # Turnover: full initial investment plus subsequent weight changes.
-        turnover_events = target.diff().abs().sum(axis=1) / 2.0
-        turnover_events.iloc[0] = 1.0
-        gross = (weights * returns[members]).sum(axis=1).fillna(0.0)
-        costs = turnover_events.fillna(0.0) * transaction_cost
-        net = gross - costs
+        # Equal weights are known without observing the current day's return,
+        # so scheduled rebalances occur at the start of the rebalance date.
+        # Holdings then drift until the next scheduled rebalance.
+        net, turnover_events = _simulate_equal_weight_portfolio(
+            returns[members], rebalance_idx, transaction_cost
+        )
         equity = (1.0 + net).cumprod()
         total_return = float(equity.iloc[-1] - 1.0)
         years = n_days / 252.0

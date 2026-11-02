@@ -41,6 +41,28 @@ class TrackAMathTests(unittest.TestCase):
         self.assertGreater(res["total_return"], 0.40)
         self.assertLess(res["total_return"], 0.60)
 
+    def test_weights_drift_between_monthly_rebalances(self):
+        # A round-trips 100 -> 200 -> 100 while B stays flat. Buy-and-hold
+        # equal weight is flat before inception cost; daily equal weighting
+        # would incorrectly earn +12.5% from volatility pumping.
+        prices = prices_frame({"A": [100.0, 200.0, 100.0], "B": [100.0] * 3})
+        result = bt.run_track_a(prices, {"strat": ["A", "B"]})
+        res = result["results"]["strat"]
+        self.assertLess(res["total_return"], 0.0)
+        self.assertGreater(res["total_return"], -0.002)
+        self.assertEqual(res["turnover"], 1.0)
+
+    def test_monthly_rebalance_charges_drift_turnover(self):
+        n = 44
+        prices = prices_frame(
+            {
+                "A": [100.0 * (1.03**i) for i in range(n)],
+                "B": [100.0] * n,
+            }
+        )
+        result = bt.run_track_a(prices, {"strat": ["A", "B"]})
+        self.assertGreater(result["results"]["strat"]["turnover"], 1.0)
+
     def test_metadata_always_present(self):
         prices = prices_frame({"A": [100.0] * 63, "SPY": [100.0] * 63})
         result = bt.run_track_a(prices, {"strat": ["A"]}, benchmarks=["SPY"])

@@ -178,10 +178,12 @@ def build_performance_table(price_history: pd.DataFrame) -> pd.DataFrame:
     perf["distance_from_52w_high"] = latest / high_52w - 1
 
     for benchmark in RS_COMPARATORS:
-        if benchmark not in close.columns:
+        if benchmark not in perf.index or pd.isna(perf.at[benchmark, "return_3m"]):
             perf[f"rs_vs_{benchmark.lower()}"] = pd.NA
             continue
-        perf[f"rs_vs_{benchmark.lower()}"] = perf["return_3m"] - (latest[benchmark] / close[benchmark].iloc[-64] - 1)
+        perf[f"rs_vs_{benchmark.lower()}"] = (
+            perf["return_3m"] - float(perf.at[benchmark, "return_3m"])
+        )
 
     ticker_to_group = {
         ticker: group

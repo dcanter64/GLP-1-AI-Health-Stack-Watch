@@ -5,7 +5,9 @@ Covers the 19 spec'd Phase 4 test items plus history-store guarantees.
 
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
 from types import SimpleNamespace
 
 import pandas as pd
@@ -117,7 +119,7 @@ class AllocationTierTests(unittest.TestCase):
         self.assertEqual(de.TIER_NAMES[4], "Maximum-conviction overweight")
 
     def test_tier_name_none(self):
-        self.assertEqual(de.tier_name(None), "not rated")
+        self.assertEqual(de.tier_name(None), "N/A")
 
 
 class TierChangeLimitTests(unittest.TestCase):
@@ -487,7 +489,9 @@ class RegulatoryOverrideTests(unittest.TestCase):
         )
         self.assertTrue(card["regulatory_override"])
         self.assertIsNone(card["recommended_tier"])
-        self.assertEqual(card["recommendation"], "HOLD")
+        self.assertEqual(card["recommendation"], "NOT RATED")
+        self.assertEqual(card["recommendation_display"], "NOT RATED - insufficient history")
+        self.assertEqual(card["confidence_band"], "Low")
 
     def test_override_respects_two_tier_cap(self):
         # m1: a 4 -> 1 derisk must go through the limiter, not around it.
@@ -589,6 +593,24 @@ class DecisionHistoryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "future report date"):
                 de.append_decision_history(tmp, [make_card()], as_of)
 
+    def test_utc_current_date_is_not_rejected_by_local_date_boundary(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            de, "_utc_today", return_value=date(2026, 11, 3)
+        ):
+            loaded = de.append_decision_history(
+                tmp,
+                [make_card()],
+                datetime(2026, 11, 3, 1, tzinfo=timezone.utc),
+            )
+            self.assertEqual(len(loaded), 1)
+
+    def test_corrupt_history_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / de.DECISION_FILENAME
+            path.write_text("wrong,columns\n1,2\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "refusing to continue"):
+                de.load_decision_history(tmp)
+
     def test_previous_decision_lookup(self):
         history = decision_history_frame(
             [
@@ -601,6 +623,56 @@ class DecisionHistoryTests(unittest.TestCase):
         self.assertEqual(int(prev["recommended_tier"]), 2)
         self.assertIsNone(de.previous_decision(history, "Missing"))
         self.assertIsNone(de.previous_decision(pd.DataFrame(), "S"))
+
+
+class ColdStartGuardrailTests(unittest.TestCase):
+    def test_unrated_stack_uses_provisional_language_and_no_agreement(self):
+        cards = []
+        for sleeve, score, structural in (
+            (de.LEADER_SLEEVE, 50.0, 60.0),
+            ("Health Data", 59.0, 60.0),
+            ("Gene Editing", 39.0, 20.0),
+        ):
+            card = make_card(
+                sleeve=sleeve,
+                opp_row=make_opp(sleeve=sleeve, opportunity=score, structural_score=structural),
+                persist_row=make_persist(
+                    sleeve=sleeve,
+                    readiness="Insufficient Evidence",
+                    consecutive_improving=0,
+                    four_report_trend="insufficient",
+                ),
+                prev=None,
+            )
+            cards.append(card)
+
+        leader = de.build_leader_decision(cards)
+        stack = de.build_stack_decision(cards, de.EXPOSURE_SELECTIVE, 43.6)
+
+        self.assertEqual(leader["recommendation"], de.REC_NOT_RATED)
+        self.assertTrue(stack["provisional"])
+        self.assertIn("allocation decision deferred", stack["headline"])
+        self.assertIn("Constructive sleeves: N/A", stack["headline"])
+        self.assertIsNone(de.leaders_stack_agree(leader, stack))
+
+        committee = de.build_committee_decision(leader, stack, cards)
+        self.assertIn("No formal sleeve allocations yet", committee)
+        self.assertIn("Health Data", committee)
+        self.assertIn("Gene Editing", committee)
+
+        risks = de.build_decision_risks(cards, leader, stack)
+        self.assertTrue(any("Decision maturity risk" in risk for risk in risks))
+        self.assertTrue(any("Gene Editing" in risk and "below" in risk for risk in risks))
+
+    def test_unrated_conditions_do_not_conflate_maximum_and_no_rating(self):
+        upgrade = de.upgrade_condition(
+            "Insufficient Evidence", None, 59.0, history_report_count=1
+        )
+        self.assertIn("Path to initial rating", upgrade)
+        self.assertIn("1 of 4", upgrade)
+        self.assertIn("initial allocation tier", de.downgrade_condition(None))
+        invalidation = de.invalidation_condition(20.0, is_rated=False)
+        self.assertIn("already fails", invalidation)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed (2026-11-02)
+
+- Public-release adversarial review: Track A now models true periodic equal-weight rebalancing with drift and actual turnover; all UTC-dated history stores validate against the UTC calendar; the LLY component budget is exactly 100 points without hidden saturation; corrupt or wrong-schema audit CSVs fail closed; RSS failures reach diagnostics; spreadsheet exports neutralize formula-leading external text; and short price histories return partial metrics instead of crashing the market pipeline. Regression coverage added for every failure mode.
+
+### Improved (2026-10-12)
+
+- Decision-report quality pass: cold-start sleeves now render as `NOT RATED - insufficient history` with explicit 1-of-4 maturity, provisional exposure, `N/A` tier/agreement fields, and Low decision confidence separated from model-input/data confidence. Unrated invalidation conditions are non-operative but threshold breaches remain visible as watch risks. LLY-vs-NVO evidence is labeled pair-relative and capped at neutral when LLY trails XLV, QQQ, and SPY; the report now shows the full LLY score attribution. Key stories rank fundamental catalysts and source quality ahead of market narrative, exclude routine corporate notices, and expose evidence/source-quality fields. Report metadata includes generation, market, and news cutoffs; stale Phase 3 wording and duplicate operational rerun comparisons are removed; detailed decision cards move to Appendix A; final report punctuation is normalized for Windows readers.
+
 ### Fixed (2026-10-12)
 
 - PR #6: fixed the 4 pre-existing `test_news.py` date-decay failures. Root cause was a single time-bomb, not four classifier bugs — fixtures used hardcoded 2026-07-08 `published_at` dates that aged past the 21-day news window, so every fixture was rejected as stale before classification ran. Fix is tests-only: new `_published_at(days_ago)` helper makes fixture dates relative to now (the age gate itself is unchanged and still covered by `test_build_articles_frame_rejects_stale_story`). Verified result: full suite 285/285 passing.

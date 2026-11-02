@@ -106,11 +106,14 @@ def yahoo_ticker_rss_url(ticker: str) -> str:
 
 def fetch_feed(query: str, timeout: int = 20) -> list[dict[str, Any]]:
     headers = {"User-Agent": "Mozilla/5.0 (compatible; GLP1-AI-Health-Stack-Watch/1.0)"}
+    errors: list[str] = []
+    reached_feed = False
     for url in yahoo_rss_urls(query):
         try:
             response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
             feed = feedparser.parse(response.content)
+            reached_feed = True
             if not feed.entries:
                 continue
             records = [
@@ -119,8 +122,11 @@ def fetch_feed(query: str, timeout: int = 20) -> list[dict[str, Any]]:
                 if entry.get("title") and entry.get("link")
             ]
             return [record for record in records if keyword_candidate_has_evidence(record)]
-        except Exception:
+        except Exception as exc:
+            errors.append(f"{urlparse(url).netloc}: {type(exc).__name__}: {exc}")
             continue
+    if errors and not reached_feed:
+        raise RuntimeError("all Yahoo RSS endpoints failed: " + "; ".join(errors))
     return []
 
 
@@ -136,8 +142,10 @@ def fetch_ticker_feed(ticker: str, timeout: int = 20) -> list[dict[str, Any]]:
             for entry in feed.entries
             if entry.get("title") and entry.get("link")
         ]
-    except Exception:
-        return []
+    except Exception as exc:
+        raise RuntimeError(
+            f"Yahoo ticker RSS failed for {ticker}: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 def build_raw_article_record(

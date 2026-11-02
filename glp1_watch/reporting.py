@@ -4,6 +4,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pandas as pd
 
@@ -15,17 +16,35 @@ def ensure_output_dirs() -> None:
         path.mkdir(parents=True, exist_ok=True)
 
 
+def spreadsheet_safe_dataframe(frame: pd.DataFrame) -> pd.DataFrame:
+    """Neutralize strings that spreadsheet programs may execute as formulas."""
+    safe = frame.copy()
+    dangerous_prefixes = ("=", "+", "-", "@", "\t", "\r")
+
+    def neutralize(value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        candidate = value.lstrip(" ")
+        if candidate.startswith(dangerous_prefixes):
+            return "'" + value
+        return value
+
+    for column in safe.select_dtypes(include=["object", "string"]).columns:
+        safe[column] = safe[column].map(neutralize)
+    return safe
+
+
 def write_performance_csv(performance_table: pd.DataFrame, as_of_stamp: str) -> Path:
     ensure_output_dirs()
     path = CLASSIFIED_DIR / f"ticker_performance_{as_of_stamp}.csv"
-    performance_table.to_csv(path, index=False)
+    spreadsheet_safe_dataframe(performance_table).to_csv(path, index=False)
     return path
 
 
 def write_articles_csv(articles_df: pd.DataFrame, as_of_stamp: str) -> Path:
     ensure_output_dirs()
     path = CLASSIFIED_DIR / f"classified_articles_{as_of_stamp}.csv"
-    articles_df.to_csv(path, index=False)
+    spreadsheet_safe_dataframe(articles_df).to_csv(path, index=False)
     return path
 
 
@@ -195,8 +214,9 @@ def build_opportunity_ranking_section(snapshot: dict) -> list[str]:
             "portfolio actions.",
             "- Data limitations: the Structural Thesis Score is a news-evidence "
             "proxy (no fundamentals feed); Expectations Risk carries reduced "
-            "confidence (no valuation or earnings-revision data); trend labels "
-            "use a stateless 1M-vs-3M pace proxy until Phase 3 persistence.",
+            "confidence (no valuation or earnings-revision data). The ranking's "
+            "trend label is a current 1M-vs-3M pace signal; the separate "
+            "Persistence section supplies multi-report decision readiness.",
             "",
         ]
     )
@@ -273,7 +293,7 @@ def _format_tier_change(card: dict) -> str:
     new = card.get("recommended_tier")
     change = card.get("tier_change")
     if new is None:
-        return "not rated"
+        return "N/A"
     if prev is None:
         return f"new → Tier {new}"
     arrow = "→"
@@ -286,10 +306,35 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
     cards = snapshot.get("decision_cards") or []
     leader = snapshot.get("leader_decision") or {}
     stack = snapshot.get("stack_decision") or {}
+    market_quality = snapshot.get("market_data_quality", {}) or {}
+    all_unrated = bool(cards) and all(
+        not c.get("is_rated", c.get("recommended_tier") is not None)
+        for c in cards
+        if c.get("required")
+    )
+    decision_confidence = "Low" if all_unrated else (
+        max(cards, key=lambda c: c.get("confidence", 0)).get("confidence_band", "Low")
+        if cards
+        else "Low"
+    )
+    agreement = snapshot.get("leader_stack_agree")
+    if agreement is None:
+        agreement_text = "N/A - leader or stack is not yet rated."
+    elif agreement:
+        agreement_text = "Yes"
+    else:
+        agreement_text = "No - size the leader independently of broad-stack exposure."
     lines = [
         "## 1. Investment Committee Decision",
         "",
         snapshot.get("committee_decision", "No committee decision available."),
+        "",
+        f"- Data quality: {market_quality.get('status', 'Unknown')}",
+        f"- News confidence: {snapshot.get('news_confidence', 'Unknown')}",
+        f"- Decision confidence: {decision_confidence}",
+        "- Reason: insufficient persistence history"
+        if all_unrated
+        else "- Reason: persistence history supports rated sleeve decisions",
         "",
     ]
     pointer = str(snapshot.get("committee_pointer") or "").strip()
@@ -300,15 +345,20 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
         [
             "## 2. Allocation Decisions",
             "",
-            "| Sleeve | Prev → Rec Tier | Recommendation | Confidence | Urgency | Speed |",
+            "| Sleeve | Prev -> Rec Tier | Recommendation | Decision Confidence | Urgency | Speed |",
             "| --- | --- | --- | --- | --- | --- |",
         ]
     )
     for card in cards:
+        recommendation = card.get("recommendation_display", card["recommendation"])
+        confidence = (
+            "Low - insufficient history"
+            if not card.get("is_rated", card.get("recommended_tier") is not None)
+            else f"{card['confidence']:.0f} {card['confidence_band']}"
+        )
         lines.append(
             f"| {card['sleeve']} | {_format_tier_change(card)} "
-            f"| {card['recommendation']} | {card['confidence']:.0f} "
-            f"{card['confidence_band']} | {card['urgency']} "
+            f"| {recommendation} | {confidence} | {card['urgency']} "
             f"| {card['implementation_speed']} |"
         )
     lines.extend(
@@ -316,8 +366,8 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
             "",
             "Tiers are conviction statements (0 Avoid, 1 Exploratory, 2 Normal, "
             "3 Overweight, 4 Maximum-conviction overweight), not portfolio "
-            "percentages. Confidence is the probabilistic expression of each "
-            "recommendation, not a literal outcome probability.",
+            "percentages. Decision confidence reflects evidence maturity; model-input "
+            "confidence and data quality are reported separately.",
             "",
             "## 3. Opportunity Ranking",
             "",
@@ -326,31 +376,34 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
             "",
             f"- Leader: {leader.get('headline', 'n/a')}",
             f"- Stack: {stack.get('headline', 'n/a')}",
-            f"- Agreement: {'Yes' if snapshot.get('leader_stack_agree') else 'No — size the leader independently of broad-stack exposure.'}",
+            f"- Agreement: {agreement_text}",
             "",
-            "## 5. Decision Cards",
+            "## 5. What Matters Now",
             "",
         ]
     )
-    for card in cards:
+    required_cards = [c for c in cards if c.get("required") and c.get("opportunity_score") is not None]
+    if required_cards:
+        strongest = max(required_cards, key=lambda c: c["opportunity_score"])
+        weakest = min(required_cards, key=lambda c: c["opportunity_score"])
         lines.extend(
             [
-                f"### {card['sleeve']}",
-                "",
-                f"- Recommendation: {card['recommendation']} ({_format_tier_change(card)})",
-                f"- Implementation speed: {card['implementation_speed']}",
-                f"- Confidence: {card['confidence']:.0f} ({card['confidence_band']})",
-                f"- Urgency: {card['urgency']}",
-                f"- Tactical view: {card['tactical_view']}",
-                f"- Strategic view: {card['strategic_view']}",
-                f"- Views agree: {'Yes' if card['views_agree'] else 'No — tactical and strategic point different ways.'}",
-                f"- Upgrade: {card['upgrade_condition']}",
-                f"- Downgrade: {card['downgrade_condition']}",
-                f"- Invalidation: {card['invalidation_condition']}",
-                f"- Rationale: {card['rationale']}.",
-                "",
+                f"- Strongest provisional evidence: {strongest['sleeve']} "
+                f"({strongest['opportunity_score']:.1f}).",
+                f"- Weakest provisional evidence: {weakest['sleeve']} "
+                f"({weakest['opportunity_score']:.1f}).",
             ]
         )
+    if cards:
+        maturity = min(int(c.get("history_report_count") or 0) for c in cards)
+        required_count = max(int(c.get("required_history_reports") or 4) for c in cards)
+        lines.append(f"- History maturity: {maturity} of {required_count} required reports.")
+    lines.extend(
+        [
+            "- Full sleeve conditions and evidence details are in Appendix A.",
+            "",
+        ]
+    )
     lines.extend(
         [
             "## 6. What Changed Since the Previous Report",
@@ -367,6 +420,49 @@ def build_decision_layer_sections(snapshot: dict) -> list[str]:
     else:
         lines.append("- No elevated decision risks flagged this report.")
     lines.append("")
+    return lines
+
+
+def build_decision_cards_appendix(snapshot: dict) -> list[str]:
+    """Detailed sleeve cards live outside the main committee narrative."""
+    cards = snapshot.get("decision_cards") or []
+    lines = ["## Appendix A. Decision Cards", ""]
+    for card in cards:
+        rated = card.get("is_rated", card.get("recommended_tier") is not None)
+        if card.get("views_agree") is None:
+            views_text = "N/A - insufficient persistence history."
+        elif card["views_agree"]:
+            views_text = "Yes"
+        else:
+            views_text = "No - tactical and strategic evidence point different ways."
+        recommendation = card.get("recommendation_display", card["recommendation"])
+        decision_confidence = (
+            "Low - insufficient history"
+            if not rated
+            else f"{card['confidence']:.0f} ({card['confidence_band']})"
+        )
+        lines.extend(
+            [
+                f"### {card['sleeve']}",
+                "",
+                f"- Recommendation: {recommendation} ({_format_tier_change(card)})",
+                f"- History maturity: {int(card.get('history_report_count') or 0)} of "
+                f"{int(card.get('required_history_reports') or 4)} required reports",
+                f"- Decision confidence: {decision_confidence}",
+                f"- Model-input confidence: {card.get('model_input_confidence', 0):.0f} "
+                f"({card.get('model_input_confidence_band', 'Low')})",
+                f"- Implementation speed: {card['implementation_speed']}",
+                f"- Urgency: {card['urgency']}",
+                f"- Tactical view: {card['tactical_view']}",
+                f"- Strategic view: {card['strategic_view']}",
+                f"- Views agree: {views_text}",
+                f"- Upgrade: {card['upgrade_condition']}",
+                f"- Downgrade: {card['downgrade_condition']}",
+                f"- Invalidation: {card['invalidation_condition']}",
+                f"- Rationale: {card['rationale']}.",
+                "",
+            ]
+        )
     return lines
 
 
@@ -508,16 +604,14 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         "",
         *confirmation_section,
         *persistence_section,
-        "## Flywheel Score: Change Since Prior Run",
-        "",
-        *prior_delta_lines,
-        "",
         "## Eli Lilly AI Trade",
         "",
         f"- LLY relative strength: {snapshot['lly_summary']}",
         f"- LLY trend status: {snapshot['lly_trend_status']}",
         f"- LLY news summary: {snapshot['lly_news_summary']}",
         f"- AI-trade confirmation score: {snapshot['lly_ai_trade_score']:.1f}",
+        "- Score component breakdown:",
+        *format_lly_component_breakdown(snapshot.get("lly_ai_trade_components")),
         "",
         "## GLP-1 Market",
         "",
@@ -544,6 +638,11 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         "",
         "## Key Stories",
         "",
+        "- Selection method: fundamental catalysts and higher-quality sources rank first; "
+        "market narrative ranks lower; routine corporate notices are excluded.",
+        f"- Accepted evidence mix: {summarize_story_field(snapshot['articles'], 'evidence_type')}",
+        f"- Accepted source-quality mix: {summarize_story_field(snapshot['articles'], 'source_quality')}",
+        "",
     ]
 
     if top_stories.empty:
@@ -556,6 +655,8 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
                 f"  - Source: {clean_report_text(row['source']) if row['source'] else 'Unknown'}",
                 f"  - Date: {format_timestamp(row['published_at'])}",
                 f"  - Theme: {row['theme']}",
+                f"  - Source quality: {row.get('source_quality', story_source_quality(row))}",
+                f"  - Evidence type: {row.get('evidence_type', story_evidence_type(row))}",
                 f"  - Sentiment: {row['sentiment_label']} ({row['sentiment_score']:.2f})",
                 f"  - Tickers: {row['tickers'] or 'None detected'}",
                 f"  - URL: {row['url']}",
@@ -582,6 +683,18 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
         ]
     )
 
+    if prior_delta_lines:
+        insert_at = next(
+            (i for i, line in enumerate(existing_lines) if line == "## Eli Lilly AI Trade"),
+            len(existing_lines),
+        )
+        existing_lines[insert_at:insert_at] = [
+            "## Flywheel Score: Change Since Prior Run",
+            "",
+            *prior_delta_lines,
+            "",
+        ]
+
     # Existing sections sit under "## 8. Existing Report Sections": demote
     # their H2 headers one level so the Decision Layer numbering holds.
     demoted = [
@@ -590,27 +703,106 @@ def write_report(snapshot: dict, as_of_stamp: str) -> Path:
     lines = [
         "# GLP-1 AI Health Decision Layer",
         "",
+        *build_report_metadata(snapshot),
         *decision_sections,
         "## 8. Existing Report Sections",
         "",
         *demoted,
         *build_positions_section(snapshot),
         *build_journal_section(snapshot),
+        *build_decision_cards_appendix(snapshot),
     ]
 
-    path.write_text("\n".join(lines), encoding="utf-8")
+    # Normalize punctuation at the final boundary as well as individual
+    # headlines. This keeps reports readable in Windows tools that still
+    # mis-detect UTF-8 punctuation despite the file's UTF-8 encoding.
+    path.write_text(clean_report_text("\n".join(lines)), encoding="utf-8")
     return path
+
+
+def build_report_metadata(snapshot: dict) -> list[str]:
+    price_history = snapshot.get("price_history")
+    market_cutoff = "Unavailable"
+    if price_history is not None and not getattr(price_history, "empty", True):
+        parsed = pd.to_datetime(price_history.index, utc=True, errors="coerce")
+        valid = parsed[~pd.isna(parsed)]
+        if len(valid):
+            market_cutoff = pd.Timestamp(valid.max()).strftime("%Y-%m-%d")
+
+    articles = snapshot.get("articles")
+    news_cutoff = "Unavailable"
+    if articles is not None and not getattr(articles, "empty", True) and "published_at" in articles.columns:
+        parsed_news = pd.to_datetime(articles["published_at"], utc=True, errors="coerce").dropna()
+        if not parsed_news.empty:
+            news_cutoff = parsed_news.max().strftime("%Y-%m-%d %H:%M UTC")
+
+    return [
+        f"- Report generated: {snapshot.get('as_of_date', 'Unknown')}",
+        f"- Market data through: {market_cutoff}",
+        f"- News cutoff: {news_cutoff}",
+        "",
+    ]
+
+
+def format_lly_component_breakdown(components: object) -> list[str]:
+    if components is None or getattr(components, "empty", True):
+        return ["  - Unavailable"]
+    lines = []
+    for _, row in components.iterrows():
+        note = str(row.get("note") or "").strip()
+        suffix = f" - {note}" if note else ""
+        lines.append(
+            f"  - {row['component']}: {float(row['score']):.1f}/100, "
+            f"{float(row['contribution']):.1f} of {float(row['max_points']):.1f} points{suffix}"
+        )
+    return lines
+
+
+def summarize_story_field(articles: pd.DataFrame, column: str) -> str:
+    if articles is None or articles.empty or column not in articles.columns:
+        return "Unavailable"
+    counts = articles[column].fillna("Unknown").astype(str).value_counts()
+    return ", ".join(f"{label} ({count})" for label, count in counts.items())
 
 
 def select_key_stories(articles_df: pd.DataFrame, limit: int = 10) -> pd.DataFrame:
     if articles_df.empty:
         return articles_df.head(0)
 
+    ranked = articles_df.copy()
+    ranked["source_quality"] = ranked.apply(story_source_quality, axis=1)
+    ranked["evidence_type"] = ranked.apply(story_evidence_type, axis=1)
+    ranked = ranked[ranked["evidence_type"] != "Routine corporate notice"].copy()
+    if ranked.empty:
+        return ranked.head(0)
+
+    quality_rank = {"Primary": 4, "High": 3, "Medium": 2, "Low": 1}
+    evidence_rank = {"Fundamental catalyst": 3, "Company development": 2, "Market narrative": 1}
+    ranked["_quality_rank"] = ranked["source_quality"].map(quality_rank).fillna(1)
+    ranked["_evidence_rank"] = ranked["evidence_type"].map(evidence_rank).fillna(1)
+    relevance = (
+        ranked["relevance_score"]
+        if "relevance_score" in ranked.columns
+        else pd.Series(0.0, index=ranked.index)
+    )
+    published = (
+        ranked["published_at"]
+        if "published_at" in ranked.columns
+        else pd.Series(pd.NaT, index=ranked.index)
+    )
+    ranked["_relevance_rank"] = pd.to_numeric(relevance, errors="coerce").fillna(0.0)
+    ranked["_published_rank"] = pd.to_datetime(published, utc=True, errors="coerce")
+    ranked = ranked.sort_values(
+        ["_evidence_rank", "_quality_rank", "_relevance_rank", "_published_rank"],
+        ascending=[False, False, False, False],
+        na_position="last",
+    )
+
     selected_indices: list[object] = []
     theme_counts: dict[str, int] = {}
     cluster_counts: dict[str, int] = {}
 
-    for idx, row in articles_df.iterrows():
+    for idx, row in ranked.iterrows():
         theme = str(row.get("theme", "Other"))
         cluster = story_cluster_key(row)
         if theme_counts.get(theme, 0) >= 3:
@@ -624,7 +816,7 @@ def select_key_stories(articles_df: pd.DataFrame, limit: int = 10) -> pd.DataFra
             break
 
     if len(selected_indices) < limit:
-        for idx, row in articles_df.iterrows():
+        for idx, row in ranked.iterrows():
             if idx in selected_indices:
                 continue
             cluster = story_cluster_key(row)
@@ -635,7 +827,83 @@ def select_key_stories(articles_df: pd.DataFrame, limit: int = 10) -> pd.DataFra
             if len(selected_indices) >= limit:
                 break
 
-    return articles_df.loc[selected_indices].head(limit)
+    return ranked.loc[selected_indices].head(limit).drop(
+        columns=["_quality_rank", "_evidence_rank", "_relevance_rank", "_published_rank"],
+        errors="ignore",
+    )
+
+
+def _safe_story_text(value: object) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip()
+
+
+def story_source_quality(row: pd.Series) -> str:
+    """Coarse source tier for report ordering, not a truthfulness verdict."""
+    source = _safe_story_text(row.get("source")).lower()
+    host = urlparse(_safe_story_text(row.get("url"))).netloc.lower()
+    title = clean_report_text(row.get("title", "")).lower()
+    if any(domain in host for domain in ("fda.gov", "sec.gov", "clinicaltrials.gov")):
+        return "Primary"
+    if any(token in source for token in ("reuters", "associated press", "bloomberg")):
+        return "High"
+    if any(token in source for token in ("stocktwits", "motley fool", "thestreet")):
+        return "Low"
+    if any(token in title for token in ("jim cramer", "price target", "analyst says")):
+        return "Low"
+    return "Medium"
+
+
+def story_evidence_type(row: pd.Series) -> str:
+    """Separate fundamental catalysts from narrative and routine notices."""
+    title = clean_report_text(row.get("title", "")).lower()
+    theme = _safe_story_text(row.get("theme")) or "Other"
+    routine_terms = (
+        "inducement grant",
+        "listing rule 5635",
+        "form 4",
+        "stock award",
+        "director compensation",
+    )
+    if any(term in title for term in routine_terms):
+        return "Routine corporate notice"
+    narrative_terms = (
+        "jim cramer",
+        "did claude",
+        "shares slip",
+        "stocks rise",
+        "is it too late to buy",
+        "price target",
+        "forecast",
+    )
+    if any(term in title for term in narrative_terms):
+        return "Market narrative"
+    catalyst_terms = (
+        "fda",
+        "phase 1",
+        "phase 2",
+        "phase 3",
+        "trial",
+        "approval",
+        "priority review",
+        "acquisition",
+        "partnership",
+        "data readout",
+        "regulatory",
+    )
+    if any(term in title for term in catalyst_terms) or theme in {
+        "Regulatory Risk",
+        "Manufacturing / Supply",
+        "Lilly M&A / IP Acquisition",
+    }:
+        return "Fundamental catalyst"
+    return "Company development"
 
 
 def story_cluster_key(row: pd.Series) -> str:
@@ -658,6 +926,22 @@ def build_prior_snapshot_delta_lines(snapshot: dict, history_path: Path) -> list
         return ["- Prior snapshot: None available"]
 
     news_stats = snapshot.get("news_stats", {})
+    comparable = {
+        "overall_score": snapshot.get("overall_score"),
+        "stance": snapshot.get("stance"),
+        "lly_ai_trade_score": snapshot.get("lly_ai_trade_score"),
+        "accepted_story_count": news_stats.get("accepted"),
+        "qualified_story_count": news_stats.get("qualified"),
+    }
+    unchanged = all(prior.get(key) == value for key, value in comparable.items())
+    prior_time = pd.to_datetime(prior.get("as_of_date"), utc=True, errors="coerce")
+    current_time = pd.to_datetime(snapshot.get("as_of_date"), utc=True, errors="coerce")
+    if unchanged and pd.notna(prior_time) and pd.notna(current_time):
+        elapsed = abs((current_time - prior_time).total_seconds())
+        if elapsed <= 15 * 60:
+            # Suppress operational reruns that add no analytical information.
+            return []
+
     return [
         f"- Prior snapshot: {prior.get('as_of_date', 'Unknown')} | {prior.get('stance', 'Unknown')} | score {format_number(prior.get('overall_score'))}",
         f"- Score change: {format_delta(snapshot.get('overall_score'), prior.get('overall_score'))}",
@@ -831,6 +1115,11 @@ def clean_report_text(value: object) -> str:
         "‘": "'",
         "“": '"',
         "”": '"',
+        "→": "->",
+        "≥": ">=",
+        "≤": "<=",
+        "…": "...",
+        "§": "Section ",
         "Â ": " ",
         "Â": "",
     }

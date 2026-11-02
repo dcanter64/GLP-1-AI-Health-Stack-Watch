@@ -231,18 +231,33 @@ def render_decision_layer(snapshot: dict) -> None:
         stack = snapshot.get("stack_decision") or {}
         st.write(f"**Leader:** {leader.get('headline', 'n/a')}")
         st.write(f"**Stack:** {stack.get('headline', 'n/a')}")
-        if not snapshot.get("leader_stack_agree", True):
+        agreement = snapshot.get("leader_stack_agree")
+        if agreement is None:
+            st.info("Leader vs Stack agreement is N/A until both decisions are rated.")
+        elif agreement is False:
             st.warning("Leader and Stack decisions disagree — size the leader independently of broad-stack exposure.")
         rows = [
             {
                 "Sleeve": c["sleeve"],
-                "Recommendation": c["recommendation"],
+                "Recommendation": c.get("recommendation_display", c["recommendation"]),
                 "Tier": (
                     f"{c['previous_tier']} → {c['recommended_tier']}"
                     if c["previous_tier"] is not None and c["recommended_tier"] is not None
-                    else (str(c["recommended_tier"]) if c["recommended_tier"] is not None else "not rated")
+                    else (str(c["recommended_tier"]) if c["recommended_tier"] is not None else "N/A")
                 ),
-                "Confidence": f"{c['confidence']:.0f} ({c['confidence_band']})",
+                "History": (
+                    f"{int(c.get('history_report_count') or 0)} of "
+                    f"{int(c.get('required_history_reports') or 4)}"
+                ),
+                "Decision Confidence": (
+                    "Low - insufficient history"
+                    if not c.get("is_rated", c.get("recommended_tier") is not None)
+                    else f"{c['confidence']:.0f} ({c['confidence_band']})"
+                ),
+                "Model Input Confidence": (
+                    f"{c.get('model_input_confidence', 0):.0f} "
+                    f"({c.get('model_input_confidence_band', 'Low')})"
+                ),
                 "Urgency": c["urgency"],
                 "Speed": c["implementation_speed"],
             }
@@ -349,6 +364,10 @@ def render_lly_tab(snapshot: dict) -> None:
         width="stretch",
         hide_index=True,
     )
+    components = snapshot.get("lly_ai_trade_components")
+    if components is not None and not getattr(components, "empty", True):
+        st.markdown("**LLY AI-trade score components**")
+        st.dataframe(components, width="stretch", hide_index=True)
 
 
 def render_basket_tab(snapshot: dict, groups: list[str], title: str) -> None:
@@ -413,7 +432,21 @@ def render_news_tab(snapshot: dict) -> None:
     else:
         st.dataframe(
             filtered_articles[
-                ["published_at", "title", "theme", "sentiment_label", "tickers", "relevance_score", "url"]
+                [
+                    column
+                    for column in [
+                        "published_at",
+                        "title",
+                        "source_quality",
+                        "evidence_type",
+                        "theme",
+                        "sentiment_label",
+                        "tickers",
+                        "relevance_score",
+                        "url",
+                    ]
+                    if column in filtered_articles.columns
+                ]
             ],
             width="stretch",
             hide_index=True,

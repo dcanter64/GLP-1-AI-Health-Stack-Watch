@@ -114,7 +114,8 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("## 1. Investment Committee Decision", contents)
         self.assertIn("## 2. Allocation Decisions", contents)
         self.assertIn("## 4. Leader vs Stack Decision", contents)
-        self.assertIn("## 5. Decision Cards", contents)
+        self.assertIn("## 5. What Matters Now", contents)
+        self.assertIn("## Appendix A. Decision Cards", contents)
         self.assertIn("## 7. Decision Risks", contents)
         self.assertIn("## 8. Existing Report Sections", contents)
         self.assertIn("### Executive Summary", contents)
@@ -127,6 +128,8 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("Source: Unknown", contents)
         self.assertIn("Date: 2026-07-09 15:06 UTC", contents)
         self.assertIn("Drivers remain supportive overall.", contents)
+        self.assertNotIn("Ã", contents)
+        self.assertNotIn("â", contents)
 
     def test_write_report_includes_change_vs_prior_snapshot(self) -> None:
         snapshot = make_snapshot()
@@ -178,6 +181,60 @@ class ReportingTests(unittest.TestCase):
         self.assertLessEqual(int(legal_count), 2)
         self.assertLessEqual(int((selected["theme"] == "GLP-1 Demand").sum()), 3)
         self.assertIn("AI Drug Discovery", selected["theme"].tolist())
+
+    def test_key_story_ranking_excludes_routine_notices_and_demotes_commentary(self) -> None:
+        articles = pd.DataFrame(
+            [
+                {
+                    "title": "Intellia reports inducement grants under Nasdaq Listing Rule 5635",
+                    "source": "Yahoo Finance",
+                    "url": "https://finance.yahoo.com/a",
+                    "theme": "Cardiovascular / Gene Editing",
+                    "tickers": "NTLA",
+                    "relevance_score": 0.99,
+                    "published_at": "2026-10-10T12:00:00Z",
+                },
+                {
+                    "title": "Jim Cramer gives a clear response on Lilly",
+                    "source": "Yahoo Finance",
+                    "url": "https://finance.yahoo.com/b",
+                    "theme": "GLP-1 Competition",
+                    "tickers": "LLY",
+                    "relevance_score": 0.95,
+                    "published_at": "2026-10-10T11:00:00Z",
+                },
+                {
+                    "title": "FDA grants priority review for gene editing therapy",
+                    "source": "Reuters",
+                    "url": "https://reuters.com/c",
+                    "theme": "Cardiovascular / Gene Editing",
+                    "tickers": "NTLA",
+                    "relevance_score": 0.8,
+                    "published_at": "2026-10-09T12:00:00Z",
+                },
+            ]
+        )
+
+        selected = reporting.select_key_stories(articles, limit=2)
+
+        self.assertNotIn("inducement grants", " ".join(selected["title"]).lower())
+        self.assertEqual(selected.iloc[0]["evidence_type"], "Fundamental catalyst")
+        self.assertEqual(selected.iloc[0]["source_quality"], "High")
+
+    def test_prior_snapshot_suppresses_unchanged_operational_rerun(self) -> None:
+        snapshot = make_snapshot()
+        snapshot["as_of_date"] = "2026-07-09 15:07 UTC"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "dashboard_scores.jsonl"
+            path.write_text(
+                '{"as_of_date":"2026-07-09 15:06 UTC","overall_score":72.5,'
+                '"stance":"Bullish","lly_ai_trade_score":91.0,'
+                '"accepted_story_count":14,"qualified_story_count":8}\n',
+                encoding="utf-8",
+            )
+            lines = reporting.build_prior_snapshot_delta_lines(snapshot, path)
+
+        self.assertEqual(lines, [])
 
     def test_write_validation_file_includes_errors_counts_and_exceptions(self) -> None:
         snapshot = make_snapshot()
@@ -231,6 +288,30 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(entry["article_count"], 1)
         self.assertEqual(entry["accepted_story_count"], 14)
         self.assertEqual(entry["qualified_story_count"], 8)
+
+    def test_article_csv_neutralizes_spreadsheet_formulas(self) -> None:
+        articles = pd.DataFrame(
+            [
+                {
+                    "title": '=HYPERLINK("https://attacker.invalid","click")',
+                    "summary": "  +SUM(1,1)",
+                    "source": "@malicious",
+                    "sentiment_score": -0.25,
+                }
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            reporting, "CLASSIFIED_DIR", Path(tmpdir)
+        ), patch.object(reporting, "REPORTS_DIR", Path(tmpdir)), patch.object(
+            reporting, "HISTORY_DIR", Path(tmpdir)
+        ), patch.object(reporting, "VALIDATION_DIR", Path(tmpdir)):
+            path = reporting.write_articles_csv(articles, "test")
+            exported = pd.read_csv(path, keep_default_na=False)
+
+        self.assertTrue(exported.loc[0, "title"].startswith("'="))
+        self.assertTrue(exported.loc[0, "summary"].startswith("'  +"))
+        self.assertTrue(exported.loc[0, "source"].startswith("'@"))
+        self.assertEqual(exported.loc[0, "sentiment_score"], -0.25)
 
     def test_append_score_history_skips_same_minute_duplicate(self) -> None:
         snapshot = make_snapshot()

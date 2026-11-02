@@ -2,7 +2,9 @@
 
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -70,6 +72,22 @@ class JournalStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "future decision date"):
                 dj.append_journal_entries(tmp, [entry()], as_of("2099-01-01"))
+
+    def test_utc_current_date_is_not_rejected_by_local_date_boundary(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            dj, "_utc_today", return_value=date(2026, 11, 3)
+        ):
+            journal = dj.append_journal_entries(
+                tmp, [entry()], datetime(2026, 11, 3, 1, tzinfo=timezone.utc)
+            )
+            self.assertEqual(len(journal), 1)
+
+    def test_corrupt_journal_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / dj.JOURNAL_FILENAME
+            path.write_text("wrong,columns\n1,2\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "refusing to continue"):
+                dj.load_journal(tmp)
 
     def test_atomic_write_no_leftovers(self):
         import pathlib

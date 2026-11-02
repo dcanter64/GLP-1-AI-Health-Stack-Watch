@@ -24,12 +24,16 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 DECISION_FILENAME = "decision_history.csv"
+
+
+def _utc_today():
+    return datetime.now(timezone.utc).date()
 
 # Ten recommendation categories (spec).
 REC_STRONG_INCREASE = "STRONG INCREASE"
@@ -42,6 +46,12 @@ REC_STRONG_REDUCE = "STRONG REDUCE"
 REC_AVOID = "AVOID NEW CAPITAL"
 REC_WATCH_REENTRY = "WATCH FOR RE-ENTRY"
 REC_CATALYST_WATCH = "CATALYST-DEPENDENT WATCH"
+# Explicit non-recommendation used when persistence history is too shallow
+# to support an allocation tier. This sits outside the ten recommendation
+# categories because it is deliberately not an investment action.
+REC_NOT_RATED = "NOT RATED"
+NOT_RATED_DISPLAY = "NOT RATED - insufficient history"
+REQUIRED_HISTORY_REPORTS = 4
 
 RECOMMENDATIONS = (
     REC_STRONG_INCREASE,
@@ -121,7 +131,7 @@ def confidence_band(score: float) -> str:
 
 def tier_name(tier: int | None) -> str:
     if tier is None:
-        return "not rated"
+        return "N/A"
     return f"Tier {tier} ({TIER_NAMES[tier]})"
 
 
@@ -141,8 +151,19 @@ def load_decision_history(history_dir: str | Path) -> pd.DataFrame:
         return pd.DataFrame(columns=DECISION_COLUMNS)
     try:
         frame = pd.read_csv(path)
-    except Exception:
-        return pd.DataFrame(columns=DECISION_COLUMNS)
+    except Exception as exc:
+        raise RuntimeError(
+            f"decision_engine: cannot read decision history {path}; "
+            "refusing to continue because a later write could erase it"
+        ) from exc
+    required = {"as_of_date", "sleeve"}
+    missing_required = sorted(required - set(frame.columns))
+    if missing_required:
+        raise RuntimeError(
+            f"decision_engine: decision history {path} is missing required "
+            f"column(s) {', '.join(missing_required)}; refusing to continue "
+            "because a later write could erase it"
+        )
     for column in DECISION_COLUMNS:
         if column not in frame.columns:
             frame[column] = pd.NA
@@ -190,7 +211,7 @@ def append_decision_history(
     path = _decision_path(history_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     date_str = as_of_dt.strftime("%Y-%m-%d")
-    today = pd.Timestamp(date.today().isoformat())
+    today = pd.Timestamp(_utc_today())
     if pd.Timestamp(date_str) > today:
         raise ValueError(
             f"decision_engine: refusing to record future report date: {date_str}"
@@ -608,9 +629,18 @@ def upgrade_condition(
     recommended_tier: int | None,
     opportunity: float | None,
     persist_row: dict | None = None,
+    history_report_count: int = 0,
 ) -> str:
-    if recommended_tier is None or recommended_tier >= 4:
-        return "Already at maximum tier or not rated — no upgrade path defined."
+    if recommended_tier is None:
+        remaining = max(REQUIRED_HISTORY_REPORTS - history_report_count, 0)
+        return (
+            "Path to initial rating: complete "
+            f"{remaining} additional report(s) ({history_report_count} of "
+            f"{REQUIRED_HISTORY_REPORTS} recorded), then require Early Signal "
+            f"readiness or better with opportunity >= {WEAK_THRESHOLD:.0f}."
+        )
+    if recommended_tier >= 4:
+        return "Already at maximum tier - no higher upgrade tier exists."
     banked = ""
     if persist_row is not None:
         above = int(persist_row.get("consecutive_above_strong") or 0)
@@ -646,8 +676,10 @@ def upgrade_condition(
 
 
 def downgrade_condition(recommended_tier: int | None) -> str:
-    if recommended_tier is None or recommended_tier <= 0:
-        return "Already at Tier 0 or not rated — no downgrade path defined."
+    if recommended_tier is None:
+        return "Not applicable until an initial allocation tier is established."
+    if recommended_tier <= 0:
+        return "Already at Tier 0 - no lower downgrade tier exists."
     return (
         f"Downgrade to Tier {recommended_tier - 1}: readiness Exhausted, "
         f"opportunity < {WEAK_THRESHOLD:.0f} for 2 consecutive reports, "
@@ -655,11 +687,24 @@ def downgrade_condition(recommended_tier: int | None) -> str:
     )
 
 
-def invalidation_condition() -> str:
-    return (
-        "Invalidation: structural thesis score < 40, or a material adverse "
-        "regulatory event directly affecting core sleeve holdings."
+def invalidation_condition(
+    structural_score: float | None = None,
+    *,
+    is_rated: bool = True,
+) -> str:
+    threshold = (
+        "structural thesis score < 40, or a material adverse regulatory "
+        "event directly affecting core sleeve holdings"
     )
+    if not is_rated:
+        if structural_score is not None and structural_score < 40:
+            return (
+                "Not applicable until an initial rating is established; "
+                f"current structural score {structural_score:.1f} already "
+                "fails the <40 threshold and is flagged as a watch risk."
+            )
+        return f"Not applicable until an initial rating is established; monitor {threshold}."
+    return threshold + "."
 
 
 # ---------------------------------------------------------------------------
@@ -699,6 +744,17 @@ def build_decision_card(
     readiness_changed = bool(prev) and prev_readiness != readiness
 
     regulatory_hit = regulatory_override(sleeve_tickers, news_events)
+    sleeve_rows = (
+        sleeve_history[sleeve_history["sleeve"] == sleeve]
+        if sleeve_history is not None
+        and not sleeve_history.empty
+        and "sleeve" in sleeve_history.columns
+        else pd.DataFrame()
+    )
+    if not sleeve_rows.empty and "as_of_date" in sleeve_rows.columns:
+        history_report_count = int(sleeve_rows["as_of_date"].nunique())
+    else:
+        history_report_count = int(len(sleeve_rows))
 
     # Breadth collapse: 50DMA participation falling over three reports.
     breadth_collapse = False
@@ -783,6 +839,10 @@ def build_decision_card(
             regulatory_hit=regulatory_hit,
         )
 
+    is_unrated = new_tier is None and prev_tier is None
+    if is_unrated:
+        recommendation = REC_NOT_RATED
+
     tier_change = (
         None
         if new_tier is None or prev_tier is None
@@ -797,7 +857,8 @@ def build_decision_card(
         market_data_quality=market_data_quality,
         news_confidence=news_confidence,
     )
-    confidence = confidence_score(inputs, confidence_weights)
+    model_input_confidence = confidence_score(inputs, confidence_weights)
+    confidence = model_input_confidence
     if regulatory_hit:
         confidence = max(0.0, confidence - 20.0)
 
@@ -805,6 +866,12 @@ def build_decision_card(
     expectations_risk = _safe_float(opp_row.get("expectations_risk_score"))
     if expectations_risk is not None and expectations_risk >= 70:
         confidence = max(0.0, confidence - 10.0)
+
+    # A high-quality cross-sectional snapshot is not the same thing as a
+    # high-confidence allocation decision. Cold-start recommendations stay
+    # explicitly Low confidence until persistence history can rate them.
+    if is_unrated:
+        confidence = min(confidence, 39.0)
 
     improving = int(persist_row.get("consecutive_improving") or 0)
     deteriorating = int(persist_row.get("consecutive_deteriorating") or 0)
@@ -820,7 +887,7 @@ def build_decision_card(
 
     tactical = tactical_view(persist_row, readiness)
     strategic = strategic_view(opp_row, readiness)
-    agree = views_agree(persist_row, opp_row)
+    agree = None if is_unrated else views_agree(persist_row, opp_row)
 
     recognition_gap = str(opp_row.get("recognition_gap") or "")
 
@@ -837,6 +904,12 @@ def build_decision_card(
     if recognition_gap and recognition_gap.lower() != "none":
         rationale_bits.append(f"recognition gap: {recognition_gap}")
 
+    structural_score = _safe_float(opp_row.get("structural_score"))
+    structural_invalidation_breached = bool(
+        structural_score is not None and structural_score < 40
+    )
+    invalidation_breached = structural_invalidation_breached or regulatory_hit
+
     return {
         "sleeve": sleeve,
         "required": bool(opp_row.get("required", True)),
@@ -846,17 +919,35 @@ def build_decision_card(
         "recommended_tier": new_tier,
         "tier_change": tier_change,
         "recommendation": recommendation,
+        "recommendation_display": NOT_RATED_DISPLAY if is_unrated else recommendation,
+        "is_rated": not is_unrated,
+        "history_report_count": history_report_count,
+        "required_history_reports": REQUIRED_HISTORY_REPORTS,
         "implementation_speed": implementation_speed(recommendation, regulatory_hit),
         "confidence": confidence,
         "confidence_band": confidence_band(confidence),
+        "model_input_confidence": model_input_confidence,
+        "model_input_confidence_band": confidence_band(model_input_confidence),
         "urgency": urgency,
         "tactical_view": tactical,
         "strategic_view": strategic,
         "views_agree": agree,
         "recognition_gap": recognition_gap,
-        "upgrade_condition": upgrade_condition(readiness, new_tier, opportunity, persist_row),
+        "upgrade_condition": upgrade_condition(
+            readiness,
+            new_tier,
+            opportunity,
+            persist_row,
+            history_report_count,
+        ),
         "downgrade_condition": downgrade_condition(new_tier),
-        "invalidation_condition": invalidation_condition(),
+        "invalidation_condition": invalidation_condition(
+            structural_score,
+            is_rated=not is_unrated,
+        ),
+        "invalidation_breached": invalidation_breached,
+        "structural_invalidation_breached": structural_invalidation_breached,
+        "structural_score": structural_score,
         "regulatory_override": regulatory_hit,
         "severe_break": severe_break,
         "break_reason": break_reason,
@@ -932,10 +1023,27 @@ def build_leader_decision(cards: list[dict]) -> dict:
     if card is None:
         return {
             "sleeve": LEADER_SLEEVE,
-            "recommendation": REC_HOLD,
+            "recommendation": REC_NOT_RATED,
             "tier": None,
             "confidence": 0.0,
-            "headline": f"{LEADER_SLEEVE}: no data — HOLD.",
+            "direction": "not rated",
+            "is_rated": False,
+            "headline": f"{LEADER_SLEEVE}: {NOT_RATED_DISPLAY}.",
+        }
+    if not card.get("is_rated", card.get("recommended_tier") is not None):
+        count = int(card.get("history_report_count") or 0)
+        required = int(card.get("required_history_reports") or REQUIRED_HISTORY_REPORTS)
+        return {
+            "sleeve": LEADER_SLEEVE,
+            "recommendation": REC_NOT_RATED,
+            "tier": None,
+            "confidence": card["confidence"],
+            "direction": "not rated",
+            "is_rated": False,
+            "headline": (
+                f"{LEADER_SLEEVE}: {NOT_RATED_DISPLAY} "
+                f"({count} of {required} required reports)."
+            ),
         }
     direction = (
         "constructive"
@@ -950,6 +1058,7 @@ def build_leader_decision(cards: list[dict]) -> dict:
         "tier": card["recommended_tier"],
         "confidence": card["confidence"],
         "direction": direction,
+        "is_rated": True,
         "headline": (
             f"{LEADER_SLEEVE}: {card['recommendation']} "
             f"({tier_name(card['recommended_tier'])}, "
@@ -1001,6 +1110,10 @@ def build_stack_decision(
     decreases = sum(
         1 for c in required if c["recommendation"] in (REC_REDUCE, REC_STRONG_REDUCE, REC_AVOID)
     )
+    all_unrated = bool(required) and all(
+        not c.get("is_rated", c.get("recommended_tier") is not None)
+        for c in required
+    )
     if exposure == EXPOSURE_NO_NEW:
         stance = "defensive"
     elif increases > decreases:
@@ -1010,20 +1123,34 @@ def build_stack_decision(
     else:
         stance = "neutral"
     fly_txt = f"{flywheel_score:.1f}" if flywheel_score is not None else "n/a"
+    if all_unrated:
+        stance = "not rated"
+        headline = (
+            f"Provisional {exposure.lower()} signal; allocation decision deferred "
+            f"(flywheel {fly_txt}). Constructive sleeves: N/A; defensive sleeves: "
+            "N/A; median sleeve tier: N/A."
+        )
+    else:
+        headline = (
+            f"{exposure} exposure (flywheel {fly_txt}). "
+            f"{increases} sleeve(s) constructive, {decreases} defensive. "
+            f"Median sleeve tier: {tier_name(median_tier)}."
+        )
     return {
         "exposure": exposure,
         "median_tier": median_tier,
         "stance": stance,
-        "headline": (
-            f"{exposure} exposure (flywheel {fly_txt}). "
-            f"{increases} sleeve(s) constructive, {decreases} defensive. "
-            f"Median sleeve tier: {tier_name(median_tier)}."
-        ),
+        "constructive_count": None if all_unrated else increases,
+        "defensive_count": None if all_unrated else decreases,
+        "provisional": all_unrated,
+        "headline": headline,
     }
 
 
-def leaders_stack_agree(leader: dict, stack: dict) -> bool:
+def leaders_stack_agree(leader: dict, stack: dict) -> bool | None:
     """Do the Leader and Stack decisions point the same way?"""
+    if not leader.get("is_rated", leader.get("tier") is not None) or stack.get("provisional"):
+        return None
     leader_dir = leader.get("direction", "neutral")
     stack_stance = stack.get("stance", "neutral")
     exposure = stack.get("exposure", "")
@@ -1041,6 +1168,32 @@ def build_committee_decision(
 ) -> str:
     """Section 1: one-paragraph Investment Committee Decision."""
     agree = leaders_stack_agree(leader, stack)
+    required = [c for c in cards if c.get("required")]
+    all_unrated = bool(required) and all(
+        not c.get("is_rated", c.get("recommended_tier") is not None)
+        for c in required
+    )
+    if all_unrated:
+        ranked = [c for c in required if c.get("opportunity_score") is not None]
+        strongest = max(ranked, key=lambda c: c["opportunity_score"], default=None)
+        weakest = min(ranked, key=lambda c: c["opportunity_score"], default=None)
+        count = min(
+            (int(c.get("history_report_count") or 0) for c in required),
+            default=0,
+        )
+        remaining = max(REQUIRED_HISTORY_REPORTS - count, 0)
+        evidence = ""
+        if strongest and weakest:
+            evidence = (
+                f" Cross-sectional evidence provisionally favors {strongest['sleeve']}, "
+                f"while {weakest['sleeve']} is weakest."
+            )
+        return (
+            "Current conclusion: No formal sleeve allocations yet because "
+            f"persistence history contains {count} of {REQUIRED_HISTORY_REPORTS} "
+            f"required reports.{evidence} Maintain a selective watchlist and "
+            f"reassess after {remaining} additional report(s) or a material catalyst."
+        )
     top = max(
         (c for c in cards if c["recommended_tier"] is not None),
         key=lambda c: (c["recommended_tier"], c["confidence"]),
@@ -1051,7 +1204,7 @@ def build_committee_decision(
         f"Leader: {leader['recommendation']} ({tier_name(leader['tier'])}).",
         f"Stack: {stack['headline']}",
     ]
-    if not agree:
+    if agree is False:
         lines.append(
             "The Leader and Stack decisions disagree — size the leader "
             "independently of broad-stack exposure."
@@ -1071,11 +1224,23 @@ def build_committee_decision(
 def build_decision_risks(cards: list[dict], leader: dict, stack: dict) -> list[str]:
     """Section 7: decision risks as concrete bullets, no vague language."""
     risks: list[str] = []
-    if not leaders_stack_agree(leader, stack):
+    agreement = leaders_stack_agree(leader, stack)
+    if agreement is False:
         risks.append(
             f"Leader vs stack disagreement: leader is {leader['direction']} "
             f"while the stack reads {stack['stance']} ({stack['exposure']}). "
             "A single-sleeve call must not override stack-level exposure."
+        )
+    required = [c for c in cards if c.get("required")]
+    if required and all(
+        not c.get("is_rated", c.get("recommended_tier") is not None)
+        for c in required
+    ):
+        count = min((int(c.get("history_report_count") or 0) for c in required), default=0)
+        risks.append(
+            "Decision maturity risk: every required sleeve is unrated because "
+            f"persistence history contains only {count} of {REQUIRED_HISTORY_REPORTS} "
+            "required reports; cross-sectional signals are provisional."
         )
     for card in cards:
         opp = card.get("opportunity_score")
@@ -1089,6 +1254,22 @@ def build_decision_risks(cards: list[dict], leader: dict, stack: dict) -> list[s
             risks.append(
                 f"{card['sleeve']}: material Regulatory Risk event in the "
                 "current window — tier increases blocked until it resolves."
+            )
+        if card.get("structural_invalidation_breached") and not card.get("is_rated", True):
+            structural = card.get("structural_score")
+            structural_text = f"{structural:.1f}" if structural is not None else "n/a"
+            risks.append(
+                f"{card['sleeve']}: current structural score {structural_text} "
+                "is below the <40 invalidation threshold. No thesis can be "
+                "formally invalidated before an initial rating, so this remains "
+                "an explicit watch risk."
+            )
+        elif card.get("structural_invalidation_breached"):
+            structural = card.get("structural_score")
+            structural_text = f"{structural:.1f}" if structural is not None else "n/a"
+            risks.append(
+                f"{card['sleeve']}: active thesis-invalidation condition - "
+                f"structural score {structural_text} is below 40."
             )
         gap = str(card.get("recognition_gap") or "")
         if gap and gap.lower() not in ("none", ""):

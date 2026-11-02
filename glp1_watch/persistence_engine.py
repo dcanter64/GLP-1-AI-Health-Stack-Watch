@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -80,6 +80,10 @@ HISTORY_COLUMNS = [
 ]
 
 
+def _utc_today():
+    return datetime.now(timezone.utc).date()
+
+
 def history_path(history_dir: str | Path) -> Path:
     return Path(history_dir) / HISTORY_FILENAME
 
@@ -89,7 +93,21 @@ def load_history(history_dir: str | Path) -> pd.DataFrame:
     path = history_path(history_dir)
     if not path.exists():
         return pd.DataFrame(columns=HISTORY_COLUMNS)
-    frame = pd.read_csv(path)
+    try:
+        frame = pd.read_csv(path)
+    except Exception as exc:
+        raise RuntimeError(
+            f"persistence_engine: cannot read sleeve history {path}; "
+            "refusing to continue because a later write could erase it"
+        ) from exc
+    required = {"as_of_date", "sleeve"}
+    missing_required = sorted(required - set(frame.columns))
+    if missing_required:
+        raise RuntimeError(
+            f"persistence_engine: sleeve history {path} is missing required "
+            f"column(s) {', '.join(missing_required)}; refusing to continue "
+            "because a later write could erase it"
+        )
     for column in HISTORY_COLUMNS:
         if column not in frame.columns:
             frame[column] = pd.NA
@@ -116,7 +134,7 @@ def append_history(
     if not new_frame.empty:
         new_frame["as_of_date"] = pd.to_datetime(new_frame["as_of_date"], format="%Y-%m-%d", errors="coerce")
         new_frame = new_frame.dropna(subset=["as_of_date", "sleeve"])
-        today = pd.Timestamp(date.today().isoformat())
+        today = pd.Timestamp(_utc_today())
         future = new_frame[new_frame["as_of_date"] > today]
         if not future.empty:
             bad = sorted(future["as_of_date"].dt.strftime("%Y-%m-%d").unique().tolist())
@@ -495,10 +513,13 @@ def build_what_changed_lines(history: pd.DataFrame) -> list[str]:
     """Sleeve-level diff between the two most recent report dates."""
     lines: list[str] = []
     if history.empty:
-        return ["No history yet — this is the first recorded report."]
+        return ["No sleeve-decision history yet - this is the first recorded report."]
     dates = sorted(history["as_of_date"].dropna().unique())
     if len(dates) < 2:
-        return ["Only one report in history — nothing to compare yet."]
+        return [
+            "Only one sleeve-decision report is recorded - nothing to compare "
+            "in sleeve persistence yet. Flywheel snapshot history is tracked separately."
+        ]
     previous_date, latest_date = dates[-2], dates[-1]
     prev = history[history["as_of_date"] == previous_date].set_index("sleeve")
     latest = history[history["as_of_date"] == latest_date].set_index("sleeve")

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
+from glp1_watch import news
 from glp1_watch.news import build_articles_frame, classify_theme, derive_source_name, keyword_candidate_has_evidence, score_sentiment, yahoo_ticker_rss_url
 
 
@@ -17,6 +19,21 @@ def _published_at(days_ago: float) -> str:
 
 
 class NewsClassificationTests(unittest.TestCase):
+    def test_fetch_failures_are_reported_in_snapshot_diagnostics(self) -> None:
+        with patch.object(news, "NEWS_QUERIES", ["test query"]), patch.object(
+            news, "NEWS_TICKERS", ["LLY"]
+        ), patch.object(
+            news.requests,
+            "get",
+            side_effect=news.requests.Timeout("simulated timeout"),
+        ):
+            snapshot = news.fetch_news_snapshot(write_raw_json=False)
+
+        self.assertEqual(len(snapshot.fetch_errors), 2)
+        self.assertIn("test query", snapshot.fetch_errors[0])
+        self.assertIn("ticker:LLY", snapshot.fetch_errors[1])
+        self.assertTrue(all("timeout" in error.lower() for error in snapshot.fetch_errors))
+
     def test_classify_theme_for_glp1_story(self) -> None:
         theme = classify_theme("Eli Lilly reported positive tirzepatide obesity trial data for Zepbound demand.")
         self.assertEqual(theme, "GLP-1 Demand")

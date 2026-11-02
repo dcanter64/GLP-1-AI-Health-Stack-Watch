@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 import tempfile
+from datetime import date
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -281,6 +283,23 @@ class ReadinessTests(unittest.TestCase):
                 append_history(tmp, [history_row("2099-01-01", "Leaders", 60.0)])
             # The rejected write left no file behind.
             self.assertTrue(load_history(tmp).empty)
+
+    def test_utc_current_date_is_not_rejected_by_local_date_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "glp1_watch.persistence_engine._utc_today",
+            return_value=date(2026, 11, 3),
+        ):
+            loaded = append_history(
+                tmp, [history_row("2026-11-03", "Leaders", 60.0)]
+            )
+            self.assertEqual(len(loaded), 1)
+
+    def test_corrupt_or_wrong_schema_history_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "health_stack_history.csv"
+            path.write_text("wrong,columns\n1,2\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "refusing to continue"):
+                load_history(tmp)
 
     def test_deterioration_fallthrough_note(self) -> None:
         frame = history_frame(

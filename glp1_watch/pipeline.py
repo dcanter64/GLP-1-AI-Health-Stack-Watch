@@ -64,6 +64,8 @@ from .news import NewsSnapshot, fetch_news_snapshot
 from .news_event_clustering import cluster_news_events, summarize_event_counts
 from .reporting import (
     append_score_history,
+    story_evidence_type,
+    story_source_quality,
     write_articles_csv,
     write_performance_csv,
     write_report,
@@ -403,6 +405,13 @@ def build_dashboard_snapshot(
     sleeve_summaries = build_sleeve_summaries(performance, sleeves)
     concentration = compute_leadership_concentration(performance, sleeve_summaries, sleeves)
     articles_with_events, news_events = cluster_news_events(news_snapshot.articles)
+    if not articles_with_events.empty:
+        articles_with_events["source_quality"] = articles_with_events.apply(
+            story_source_quality, axis=1
+        )
+        articles_with_events["evidence_type"] = articles_with_events.apply(
+            story_evidence_type, axis=1
+        )
     news_event_counts = summarize_event_counts(news_events)
     qualified_theme_count = (
         int(qualified_articles["theme"].nunique()) if not qualified_articles.empty else 0
@@ -665,6 +674,7 @@ def build_dashboard_snapshot(
         "overall_score": score_snapshot.overall_score,
         "stance": score_snapshot.stance,
         "lly_ai_trade_score": score_snapshot.lly_ai_trade_score,
+        "lly_ai_trade_components": score_snapshot.lly_ai_trade_components,
         "component_scores": score_snapshot.component_scores,
         "best_layers": best_layers,
         "lly_outperformance": {
