@@ -4,7 +4,7 @@ Streamlit dashboard for tracking the GLP-1, Eli Lilly, AI-biotech, cardiometabol
 
 ## Status
 
-Version 1 is finished as of 2026-07-19. The Streamlit dashboard pulls yfinance market data, ingests Yahoo Finance RSS stories, classifies news themes, scores the GLP-1 flywheel, and writes audit/report artifacts on each run.
+Version 1 is finished as of 2026-07-19. The Streamlit dashboard pulls yfinance market data, ingests Google News keyword RSS and Yahoo Finance ticker RSS stories, classifies news themes, scores the GLP-1 flywheel, and writes audit/report artifacts on each run.
 
 A major phased upgrade is now complete. The project has evolved into a specialized **GLP-1 and AI-Health Capital Allocation Decision Layer**, built one approved phase at a time. All five phases are complete and merged to master (PRs #1–#5; adversarial reviews fixed and live validation passed each phase). PR #6 (2026-10-11/12) fixed the 4 pre-existing `test_news.py` date-decay failures; full suite: 285/285 passing. All recommendations remain analytical — no trade execution, no personalized sizing.
 
@@ -130,9 +130,8 @@ python review_snapshot_history.py
 - The Codex sandbox blocks outbound HTTPS, so live Yahoo calls may show fallback diagnostics when run inside the sandbox.
 - Running from a normal Windows shell or by double-clicking `start_dashboard.bat` allows Yahoo Finance data to load.
 - `EXAI` has been removed from the ticker universe because Exscientia went private.
-- Yahoo Finance RSS search is still noisy. The dashboard now uses ticker headline feeds, filters unrelated finance and tech stories before classification, and derives cleaner publisher names from article URLs when feed metadata is blank.
+- Google News powers keyword searches and Yahoo Finance ticker headline feeds provide company coverage. The dashboard filters unrelated finance and tech stories before classification and derives cleaner publisher names from article URLs when feed metadata is blank.
 - Optional personal overrides can be added in `config.local.py` at the project root. See `config.local.py.example`.
-
 
 
 

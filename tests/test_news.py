@@ -5,7 +5,15 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from glp1_watch import news
-from glp1_watch.news import build_articles_frame, classify_theme, derive_source_name, keyword_candidate_has_evidence, score_sentiment, yahoo_ticker_rss_url
+from glp1_watch.news import (
+    build_articles_frame,
+    classify_theme,
+    derive_source_name,
+    keyword_candidate_has_evidence,
+    keyword_rss_urls,
+    score_sentiment,
+    yahoo_ticker_rss_url,
+)
 
 
 def _published_at(days_ago: float) -> str:
@@ -130,6 +138,15 @@ class NewsClassificationTests(unittest.TestCase):
         self.assertEqual(
             yahoo_ticker_rss_url("LLY"),
             "https://feeds.finance.yahoo.com/rss/2.0/headline?s=LLY&region=US&lang=en-US",
+        )
+
+    def test_keyword_rss_urls_use_google_news_search_endpoint(self) -> None:
+        self.assertEqual(
+            keyword_rss_urls("Eli Lilly Zepbound obesity"),
+            [
+                "https://news.google.com/rss/search?"
+                "q=Eli+Lilly+Zepbound+obesity&hl=en-US&gl=US&ceid=US:en"
+            ],
         )
 
     def test_derive_source_name_maps_known_domains(self) -> None:

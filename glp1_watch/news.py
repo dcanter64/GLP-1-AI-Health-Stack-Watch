@@ -91,11 +91,10 @@ class NewsSnapshot:
     accepted_by_ticker: pd.DataFrame
 
 
-def yahoo_rss_urls(query: str) -> list[str]:
+def keyword_rss_urls(query: str) -> list[str]:
     encoded = quote_plus(query)
     return [
-        f"https://news.search.yahoo.com/rss?p={encoded}",
-        f"https://finance.yahoo.com/rss/search?q={encoded}",
+        f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en",
     ]
 
 
@@ -108,7 +107,7 @@ def fetch_feed(query: str, timeout: int = 20) -> list[dict[str, Any]]:
     headers = {"User-Agent": "Mozilla/5.0 (compatible; GLP1-AI-Health-Stack-Watch/1.0)"}
     errors: list[str] = []
     reached_feed = False
-    for url in yahoo_rss_urls(query):
+    for url in keyword_rss_urls(query):
         try:
             response = requests.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
@@ -126,7 +125,7 @@ def fetch_feed(query: str, timeout: int = 20) -> list[dict[str, Any]]:
             errors.append(f"{urlparse(url).netloc}: {type(exc).__name__}: {exc}")
             continue
     if errors and not reached_feed:
-        raise RuntimeError("all Yahoo RSS endpoints failed: " + "; ".join(errors))
+        raise RuntimeError("all keyword RSS endpoints failed: " + "; ".join(errors))
     return []
 
 

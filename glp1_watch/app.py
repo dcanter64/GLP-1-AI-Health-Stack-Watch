@@ -381,10 +381,11 @@ def render_basket_tab(snapshot: dict, groups: list[str], title: str) -> None:
 
 
 def render_news_tab(snapshot: dict) -> None:
-    st.subheader("Yahoo Finance RSS News Engine")
+    st.subheader("News Feed")
     if snapshot["fetch_errors"]:
         st.warning("RSS fetch issues were detected. Market data and scoring still loaded.")
-        st.write(snapshot["fetch_errors"])
+        with st.expander("Show RSS fetch details"):
+            st.markdown("\n".join(f"- {error}" for error in snapshot["fetch_errors"]))
 
     st.caption(snapshot["news_confidence_note"])
     available_sources = source_options(snapshot)
@@ -576,6 +577,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
 
